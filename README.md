@@ -9,7 +9,11 @@ The approach integrates:
 - **Classical readout layers** (MLPs) trained on extracted ⟨σᶻ⟩ features  
 - **Imputation pipeline** for swaption price matrices  
 
-A high-level schematic and conceptual background are provided in the slide deck *Reservoir Computing for Financial Time-Series*.
+A high-level schematic and conceptual background are provided in the slide deck in the formats pptx and pdf.
+
+An explainer video can be found here: **** https://drive.google.com/file/d/1xKPQA3WnbGwFYCDZAwpzMwLt-FA6GGpk/view?usp=drive_link ****
+
+Send email at ***hvarma2@gmail.com*** for a detailed explanation on usage and features.
 
 ---
 
