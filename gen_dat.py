@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 import glob
 import os
-data_folder = './opt_data/2013-01'  # Path to optiondata.org files
+data_folder = './2013-01'  # Path to optiondata.org files
 
 def generate_data(ticker):
     # --- 1. LOAD ALL OPTIONS FILES ---
