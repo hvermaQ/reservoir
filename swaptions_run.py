@@ -15,8 +15,8 @@ def impute_column(col_index: int):
     series = select_timeseries(df, col_index)
     imputed = impute_nans_reservoir_stepwise(
         series,
-        w=5,
-        mem_size=2,
+        w=3,
+        mem_size=3,
         washout_length=3,
         max_train_windows=10,
     )
