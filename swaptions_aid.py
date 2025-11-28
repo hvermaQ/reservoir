@@ -1,4 +1,4 @@
-# swaptions_aid.py (Batch Reservoir + Deviation-based Imputation, Optimized)
+# swaptions_aid.py (Deviation-based, Dynamic Caching, Reservoir Imputation)
 
 import numpy as np
 import pandas as pd
@@ -10,10 +10,14 @@ from reserve_mem import (
 )
 
 # ---------------------------------------------------------------------
+# Load Excel file once (as in your original version)
+# ---------------------------------------------------------------------
 df = pd.read_excel("opt_data/sample_Simulated_Swaption_Price.xlsx", sheet_name=0)
 
 
-#------------------------------------------
+# ---------------------------------------------------------------------
+# Column selection utilities (unchanged API)
+# ---------------------------------------------------------------------
 def select_timeseries(df: pd.DataFrame, col_index: int) -> pd.Series:
     col_name = df.columns[col_index]
     return df[col_name].astype(float)
@@ -37,6 +41,7 @@ def build_last5_window(series: pd.Series, idx_nan: int, window=5):
 
 
 # ---------------------------------------------------------------------
+# Main reservoir-based NaN imputation function (deviation modeling)
 # ---------------------------------------------------------------------
 def impute_nans_reservoir_stepwise(
     series,
@@ -46,15 +51,16 @@ def impute_nans_reservoir_stepwise(
     max_train_windows: int = 20,
 ):
     """
-    Deviation-based + BATCHED reservoir imputation.
+    Deviation-based reservoir imputation with dynamic caching.
 
-    1. Collect ALL windows needed for training + imputation.
-    2. Normalize, round, deduplicate windows.
-    3. Run reservoir ONCE per unique normalized window.
-    4. Train Ridge regressor on deviations.
-    5. Impute NaNs using cached reservoir features.
+    Instead of predicting v_t directly, we predict:
+        deviation_t = v_t - mean(window)
 
-    This yields 20×–100× speedups over naive implementation.
+    Then reconstruct:
+        v_t = mean(window) + deviation_pred
+
+    Reservoir features are cached based on a rounded, normalized window
+    (Option B), so repeated or similar windows reuse the same QPU result.
     """
 
     # ---- Reservoir hyperparameters ----
@@ -64,54 +70,34 @@ def impute_nans_reservoir_stepwise(
     vals = np.asarray(series, dtype=float).copy()
     T = len(vals)
 
-    # -----------------------------------------------------------------
-    # -----------------------------------------------------------------
-    raw_windows = []   # actual window arrays
-    window_keys = []   # normalized+rounded keys
+    # Cache: key (rounded normalized window) -> reservoir features
+    reservoir_cache = {}
 
-    for t in range(w, T):
-        window = vals[t - w:t]
-        if not np.isnan(window).any():
-            raw_windows.append(window)
-
-    # Imputation windows (future NaNs)
-    nan_idxs = np.where(np.isnan(vals))[0]
-    for i in nan_idxs:
-        if i >= w:
-            window = vals[i - w:i]
-            if not np.isnan(window).any():
-                raw_windows.append(window)
-
-    if len(raw_windows) == 0:
-        return vals
-
-    # -----------------------------------------------------------------
-    # -----------------------------------------------------------------
-    def window_to_key(window):
+    def window_to_norm_and_key(window: np.ndarray):
+        """
+        Center + normalize a window and compute its cache key
+        (rounded normalized values).
+        """
         mean = window.mean()
         centered = window - mean
         std = centered.std()
         if std < 1e-8:
             std = 1.0
         normed = centered / std
-        key = tuple(np.round(normed, 3))  # OPTION B: rounding → many cache hits
-        return key
+        key = tuple(np.round(normed, 3))  # Option B: rounding for more cache hits
+        return normed, key
 
-    window_keys = [window_to_key(wd) for wd in raw_windows]
+    def get_reservoir_features(window: np.ndarray) -> np.ndarray:
+        """
+        Return reservoir features for a given window, using dynamic caching.
+        If the key is new, run the reservoir once and store the result.
+        """
+        window_norm, key = window_to_norm_and_key(window)
 
-    # Deduplicate
-    unique_keys = list(set(window_keys))
+        if key in reservoir_cache:
+            return reservoir_cache[key]
 
-    # Mapping: key -> reservoir features (to be filled)
-    reservoir_cache = {}
-
-    # -----------------------------------------------------------------
-    # -----------------------------------------------------------------
-    for key in unique_keys:
-        # Reconstruct the normalized vector (center doesn't matter for encoding)
-        window_norm = np.array(key)
-
-        # Build reservoir input:
+        # Build extended input: washout zeros + normalized window
         extended = np.concatenate([np.zeros(washout_length), window_norm])
 
         raw = reservoir_with_qubit_reuse(
@@ -131,9 +117,10 @@ def impute_nans_reservoir_stepwise(
         )
 
         reservoir_cache[key] = feats
+        return feats
 
     # -----------------------------------------------------------------
-    # STEP 3: TRAIN RIDGE MODEL ON DEVIATIONS
+    # Step 1: Build training set (predict deviations)
     # -----------------------------------------------------------------
     X_train, y_train = [], []
 
@@ -147,26 +134,27 @@ def impute_nans_reservoir_stepwise(
         if np.isnan(v_t) or np.isnan(window).any():
             continue
 
-        key = window_to_key(window)
-        feats = reservoir_cache[key]
-
         w_mean = window.mean()
-        deviation = v_t - w_mean
+        target_deviation = v_t - w_mean
 
+        feats = get_reservoir_features(window)
         X_train.append(feats)
-        y_train.append(deviation)
+        y_train.append(target_deviation)
 
-    if len(X_train) == 0:
-        return vals
+    if not X_train:
+        return vals  # nothing to learn
 
     X_train = np.vstack(X_train)
     y_train = np.array(y_train)
 
+    # -----------------------------------------------------------------
+    # Step 2: Train readout on DEVIATIONS
+    # -----------------------------------------------------------------
     readout = Ridge(alpha=1.0)
     readout.fit(X_train, y_train)
 
     # -----------------------------------------------------------------
-    # STEP 4: STEPWISE AUTOREGRESSIVE IMPUTATION
+    # Step 3: Stepwise imputation (autoregressive)
     # -----------------------------------------------------------------
     imputed = vals.copy()
 
@@ -175,26 +163,28 @@ def impute_nans_reservoir_stepwise(
         if len(nan_idxs) == 0:
             break
 
-        updated = False
+        changed = False
 
         for i in nan_idxs:
             if i < w:
                 continue
 
-            window = imputed[i - w:i]
+            window = imputed[i - w: i]
             if np.isnan(window).any():
                 continue
 
-            key = window_to_key(window)
-            feats = reservoir_cache[key]
+            w_mean = window.mean()
+            feats = get_reservoir_features(window)
             deviation_pred = readout.predict(feats.reshape(1, -1))[0]
 
-            w_mean = window.mean()
+            # reconstruct original value: window mean + deviation
             v_pred = w_mean + deviation_pred
-            imputed[i] = max(v_pred, 0.0)   # non-negative constraint
-            updated = True
 
-        if not updated:
+            # enforce non-negative volatility
+            imputed[i] = max(v_pred, 0.0)
+            changed = True
+
+        if not changed:
             break
 
     return imputed

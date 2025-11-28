@@ -25,7 +25,7 @@ def impute_column(col_index: int):
 
 if __name__ == "__main__":
     # choose up to 20 numeric columns (or first 20 columns blindly)
-    n_cols = min(10, df.shape[1])
+    n_cols = min(20, df.shape[1])
     col_indices = list(range(n_cols))
 
     with multiprocessing.Pool(processes=n_cols) as pool:
