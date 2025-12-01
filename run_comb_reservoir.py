@@ -1,7 +1,7 @@
 # run_comb_reservoir.py
 """
 Main script for time series prediction using spin-chain reservoirs.
-Compares different Hamiltonians across memory sizes.
+Computes binarized input once for all model-memory configs.
 """
 
 import multiprocessing
@@ -18,14 +18,13 @@ from sklearn.metrics import (
 )
 
 from gen_dat import generate_data
-from reservoir_gen import (  # Correct import: new time-series reservoir interface
+from reservoir_gen import (
     reservoir_from_binary_sequence,
     DEFAULT_DET_INTERVENTIONS,
 )
 from feature_engineering import (
-    binarize_deviation_4_levels_windowed,
+    create_lagged_binary_features,
     extract_sigmaz_reset_with_washout,
-    make_lagged_features,
 )
 
 # ---------------------------------------------------------------------
@@ -51,11 +50,11 @@ dates, deviations = get_deviation_timeseries(
 # Global settings
 # ---------------------------------------------------------------------
 
-T_INTERVAL = 1.75  # physical time between interventions
+T_INTERVAL = 1.75
 WASHOUT_LENGTH = 5
 WINDOW_LAGS = 5
 
-MEMORY_SIZES = [1, 2, 3, 4]
+MEMORY_SIZES = [1, 2]
 MODEL_KEYS = [
     "XXZ",
     "NNN_CHAOTIC",
@@ -65,60 +64,64 @@ MODEL_KEYS = [
 ]
 
 # ---------------------------------------------------------------------
-# Core worker function
+# Precompute binarization + lagged features once
+# ---------------------------------------------------------------------
+
+X, y = create_lagged_binary_features(
+    deviations,
+    lag_window=WINDOW_LAGS,
+    sigma_threshold=1.0,
+    two_sigma_threshold=2.0,
+)
+
+# Use the last label in each lag window as reservoir input per time step
+reservoir_input = X[:, -1]
+
+# Prepend washout prefix
+extended_labels = np.concatenate(
+    [np.zeros(WASHOUT_LENGTH, dtype=int), reservoir_input]
+)
+
+# Corresponding trimmed targets after washout
+trimmed_y = y
+
+# ---------------------------------------------------------------------
+# Core worker function (accepts precomputed inputs)
 # ---------------------------------------------------------------------
 
 def run_single_config(args):
-    model_key, mem_size = args
+    model_key, mem_size, x_seq, targets = args
 
-    # 1) Binarize deviations locally
-    x_seq = binarize_deviation_4_levels_windowed(
-        deviations, window=WINDOW_LAGS, k_sigma=2.0
-    )
-
-    # 2) Add washout prefix mapped to 'I' (label 0)
-    extended_labels = np.concatenate(
-        [np.zeros(WASHOUT_LENGTH, dtype=int), x_seq]
-    )
-
-    # 3) Run reservoir: single result with intermediate measurements
     model_kwargs = {}
     if model_key.startswith("NNN"):
         model_kwargs["use_random"] = True
 
+    # Run reservoir on precomputed binarized input sequence
     result = reservoir_from_binary_sequence(
-        x_seq=extended_labels,
+        x_seq=x_seq,
         model_key=model_key,
         num_memory=mem_size,
-        shots=1024,
+        shots=256,
         dt=T_INTERVAL,
         n_steps=1,
         det_basis=DEFAULT_DET_INTERVENTIONS,
         model_kwargs=model_kwargs,
     )
 
-    # 4) Extract reservoir features as <σ_z> time series, discard washout
+    # Extract reservoir features from intermediate measurements
     reservoir_features = extract_sigmaz_reset_with_washout(
         result,
-        n_steps=len(extended_labels),
+        n_steps=len(x_seq),
         washout_length=WASHOUT_LENGTH,
     )
-    # Align with original deviations length
-    reservoir_features = reservoir_features[-len(deviations) :]
+    reservoir_features = reservoir_features[-len(targets):]
 
-    # 5) Create lagged dataset for supervised learning
-    X, y = make_lagged_features(
-        reservoir_features,
-        target_series=deviations,
-        window=WINDOW_LAGS,
-    )
+    # Train/test split
+    split = int(0.8 * len(targets))
+    X_train, X_test = reservoir_features[:split].reshape(-1, 1), reservoir_features[split:].reshape(-1, 1)
+    y_train, y_test = targets[:split], targets[split:]
 
-    # 6) Train-test split
-    split = int(0.8 * len(X))
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
-
-    # 7) Train MLP readout
+    # Classical readout (MLP)
     mlp = MLPRegressor(
         hidden_layer_sizes=(2,),
         max_iter=500,
@@ -143,7 +146,7 @@ def run_single_config(args):
     }
 
 # ---------------------------------------------------------------------
-# Saving and plotting functions (unchanged)
+# Saving and plotting utilities (unchanged)
 # ---------------------------------------------------------------------
 
 def save_results(all_results, t_interval):
@@ -167,7 +170,6 @@ def save_results(all_results, t_interval):
     np.save(f"loss_curves_{base}.npy", loss_curves)
     with open(f"error_metrics_{base}.json", "w") as f:
         json.dump(metrics, f, indent=2)
-
 
 def plot_loss_curves(all_results):
     grouped = {}
@@ -217,11 +219,13 @@ def plot_mae_heatmap(all_results):
     plt.show()
 
 # ---------------------------------------------------------------------
-# Main entry
+# Main
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    tasks = [(model, mem) for model in MODEL_KEYS for mem in MEMORY_SIZES]
+    tasks = [
+        (model, mem, extended_labels, trimmed_y) for model in MODEL_KEYS for mem in MEMORY_SIZES
+    ]
 
     print(f"Running {len(tasks)} configurations...")
     with multiprocessing.Pool(processes=4) as pool:
