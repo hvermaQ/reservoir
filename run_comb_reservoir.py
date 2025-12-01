@@ -51,7 +51,7 @@ dates, deviations = get_deviation_timeseries(
 # ---------------------------------------------------------------------
 
 T_INTERVAL = 1.75
-WASHOUT_LENGTH = 5
+WASHOUT_LENGTH = 0
 WINDOW_LAGS = 5
 
 MEMORY_SIZES = [1, 2]
@@ -237,3 +237,15 @@ if __name__ == "__main__":
     plot_mae_heatmap(all_results)
     save_results(all_results, T_INTERVAL)
     print("Results saved!")
+
+
+"""
+result = reservoir_from_binary_sequence(x_seq=X[0], model_key="XXZ", num_memory=2, dt=1.75, n_steps=1)
+print(result)
+
+reservoir_features = extract_sigmaz_reset_with_washout(
+    result,
+    n_steps=len(X[0]),
+    washout_length=0, 
+)
+"""

@@ -11,8 +11,9 @@ Key features:
 """
 
 import numpy as np
-from qat.lang.AQASM import Program, RZ, RX, RY, X
+from qat.lang.AQASM import Program, RZ, RX, RY, X, I
 from ham_gen import MODEL_BLOCKS
+from qat.qpus import get_default_qpu
 
 
 # ---------------------------------------------------------------------------
@@ -21,7 +22,7 @@ from ham_gen import MODEL_BLOCKS
 
 def det_I(pr, q):
     """Identity (no-op)."""
-    return
+    pr.apply(I, q)
 
 def det_Z(pr, q):
     """Pi rotation around Z (σ_z)."""
@@ -87,6 +88,7 @@ def reservoir_from_binary_sequence(
     result : qat.core.Result
         Single circuit execution result with T intermediate measurements.
     """
+    qpu = get_default_qpu()
     if det_basis is None:
         det_basis = DEFAULT_DET_INTERVENTIONS
     if model_kwargs is None:
@@ -140,5 +142,5 @@ def reservoir_from_binary_sequence(
 
     circuit = pr.to_circ()
     job = circuit.to_job(nbshots=shots)
-    result = job.submit()
+    result = qpu.submit(job)
     return result
