@@ -1,76 +1,54 @@
 # reservoir_gen.py
 """
-Reservoir / process-comb construction for XXZ / NNN / IAA models.
+Reservoir construction with intermediate measurements at every timestep,
+for time series prediction using spin-chain models.
 
-Responsibilities:
-  - Take a PRE-BINARIZED intervention sequence x_seq (ints).
-  - Apply deterministic local interventions A_{x_t} on the system qubit
-    according to a configurable intervention dictionary.
-  - Between interventions, evolve {system + memory} under a Hamiltonian
-    block chosen by model_key via ham_gen.MODEL_BLOCKS.
+Key features:
+  - Apply intervention, Hamiltonian evolution, then measure data qubit for
+    every timestep in one full circuit.
+  - Reset data qubit between timesteps to encode next input.
+  - Return a single qat.core.Result with all intermediate measurement data.
 """
-
-import numpy as np
-from qat.lang.AQASM import Program, RZ, X
-from ham_gen import MODEL_BLOCKS
-
-# reservoir_gen.py (relevant parts)
 
 import numpy as np
 from qat.lang.AQASM import Program, RZ, RX, RY, X
 from ham_gen import MODEL_BLOCKS
 
+
 # ---------------------------------------------------------------------------
-# Default deterministic intervention set on the system qubit
+# Deterministic interventions on the system qubit
 # ---------------------------------------------------------------------------
 
 def det_I(pr, q):
-    """
-    Deterministic intervention ~ I / sqrt(2).
-    Implemented as identity (no-op).
-    """
+    """Identity (no-op)."""
     return
 
-
 def det_Z(pr, q):
-    """
-    Deterministic intervention ~ σ_z / sqrt(2).
-    Implemented as a π rotation around Z (overall phase irrelevant).
-    """
+    """Pi rotation around Z (σ_z)."""
     pr.apply(RZ(np.pi), q)
 
-
 def det_X(pr, q):
-    """
-    Deterministic intervention ~ σ_x / sqrt(2).
-    Implemented as a π rotation around X.
-    """
+    """Pi rotation around X (σ_x)."""
     pr.apply(RX(np.pi), q)
 
-
 def det_Y(pr, q):
-    """
-    Deterministic intervention ~ σ_y / sqrt(2).
-    Implemented as a π rotation around Y.
-    """
+    """Pi rotation around Y (σ_y)."""
     pr.apply(RY(np.pi), q)
 
 
-# Map integer label → deterministic operation on system qubit.
-# 0,1 used now; 2,3 ready for future use when binarization outputs 0–3
-# based on ±2σ variance bands in the run script.[file:22][web:31]
 DEFAULT_DET_INTERVENTIONS = {
-    0: det_I,   # e.g. small negative deviation
-    1: det_Z,   # e.g. small positive deviation
-    2: det_X,   # e.g. large negative deviation (future use)
-    3: det_Y,   # e.g. large positive deviation (future use)
+    0: det_I,   # small negative deviation
+    1: det_Z,   # small positive deviation
+    2: det_X,   # large negative deviation (future)
+    3: det_Y,   # large positive deviation (future)
 }
 
+
 # ---------------------------------------------------------------------------
-# Comb-style reservoir construction (no preprocessing)
+# Reservoir with intermediate measurements (one circuit, multiple timesteps)
 # ---------------------------------------------------------------------------
 
-def reservoir_comb_from_binary_sequence(
+def reservoir_from_binary_sequence(
     x_seq,
     model_key: str,
     num_memory: int = 2,
@@ -81,42 +59,33 @@ def reservoir_comb_from_binary_sequence(
     model_kwargs: dict | None = None,
 ):
     """
-    Build and run a reservoir / process-comb circuit for a given model and
-    a pre-binarized intervention sequence.
+    Build and run a reservoir circuit applying interventions and Hamiltonian
+    blocks with intermediate measurements at every timestep. Returns a single
+    Result object with all intermediate measurement data.
 
     Parameters
     ----------
     x_seq : sequence of int
-        Discrete intervention labels for each time step t. Typically
-        0/1 for {I, σ_z}, but can be extended (e.g. 0..3 for
-        {I, σ_x, σ_y, σ_z}) by extending det_basis.
-        Length |x_seq| = n_B = number of interventions.
+        Pre-binarized intervention sequence (labels) of length T.
     model_key : str
-        One of:
-          "XXZ",
-          "NNN_CHAOTIC", "NNN_LOCALIZED",
-          "IAA_CHAOTIC", "IAA_LOCALIZED"
-        as defined in ham_gen.MODEL_BLOCKS.
+        Hamiltonian model string from ham_gen.MODEL_BLOCKS.
     num_memory : int
-        Number of environment / memory qubits coupled to the system.
+        Number of memory/environment qubits.
     shots : int
-        Number of measurement shots for the final readout.
+        Shots per circuit execution.
     dt : float
-        Trotter time step passed to the Hamiltonian block.
+        Time step for Hamiltonian evolution.
     n_steps : int
-        Number of Trotter steps between interventions.
+        Number of Trotter steps per intervention.
     det_basis : dict or None
-        Mapping from integer labels to deterministic interventions:
-            det_basis[k] is a callable (pr, q_sys) → None.
-        If None, DEFAULT_DET_INTERVENTIONS ({I, σ_z}) is used.
+        Map from label → deterministic intervention function.
     model_kwargs : dict or None
-        Extra keyword arguments forwarded to the chosen Hamiltonian block
-        (e.g. rng, use_random for disordered NNN).
+        Additional parameters for the Hamiltonian block.
 
     Returns
     -------
     result : qat.core.Result
-        Backend execution result containing bitstring statistics, etc.
+        Single circuit execution result with T intermediate measurements.
     """
     if det_basis is None:
         det_basis = DEFAULT_DET_INTERVENTIONS
@@ -126,39 +95,35 @@ def reservoir_comb_from_binary_sequence(
     x_seq = np.asarray(x_seq, dtype=int)
     T = len(x_seq)
 
-    # Get Hamiltonian block from ham_gen
     if model_key not in MODEL_BLOCKS:
         raise ValueError(
-            f"Unknown model_key '{model_key}'. "
-            f"Valid keys: {list(MODEL_BLOCKS.keys())}"
+            f"Unknown model_key '{model_key}'. Valid keys: {list(MODEL_BLOCKS.keys())}"
         )
     ham_block_fn = MODEL_BLOCKS[model_key]
 
-    # Build circuit
     pr = Program()
-    q_sys = pr.qalloc(1)            # system qubit where interventions act
-    q_env = pr.qalloc(num_memory)   # memory / environment block
-    cbits = pr.calloc(1)            # final readout bit
+    q_sys = pr.qalloc(1)            # system qubit
+    q_mem = pr.qalloc(num_memory)   # memory qubits
+    cbit = pr.calloc(1)             # single classical bit for system measurement
 
-    # Initial state: system in |1>, env in |0...0>.
+    # Initial state: system in |1>, memory in |0...0>
     pr.apply(X, q_sys[0])
 
-    block_qubits = [q_sys[0]] + [q_env[m] for m in range(num_memory)]
+    block_qubits = [q_sys[0]] + [q_mem[m] for m in range(num_memory)]
 
-    # Multi-time comb: interventions + Hamiltonian evolution
     for t in range(T):
         label = int(x_seq[t])
 
-        # 1) Deterministic local intervention on system
-        det_op = det_basis.get(label, None)
+        # Apply deterministic intervention on system qubit
+        det_op = det_basis.get(label)
         if det_op is None:
             raise ValueError(
-                f"No deterministic operator defined for label {label}. "
-                f"Available labels: {list(det_basis.keys())}"
+                f"No deterministic operation defined for label {label}. "
+                f"Available: {list(det_basis.keys())}"
             )
         det_op(pr, q_sys[0])
 
-        # 2) Many-body Hamiltonian block between interventions
+        # Evolve under Hamiltonian block
         ham_block_fn(
             pr,
             block_qubits=block_qubits,
@@ -167,10 +132,13 @@ def reservoir_comb_from_binary_sequence(
             **model_kwargs,
         )
 
-    # Final readout of the system qubit
-    pr.measure(q_sys[0], cbits[0])
+        # Intermediate measurement of system qubit
+        pr.measure(q_sys[0], cbit)
+
+        # Reset data qubit for next timestep input
+        pr.reset([q_sys[0]])
 
     circuit = pr.to_circ()
-    qpu = circuit.to_job(nbshots=shots)
-    result = qpu.submit()
+    job = circuit.to_job(nbshots=shots)
+    result = job.submit()
     return result
