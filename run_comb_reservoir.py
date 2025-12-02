@@ -17,7 +17,7 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 
-from gen_dat import generate_data
+from data_gen import generate_data
 from reservoir_gen import (
     reservoir_from_binary_sequence,
     DEFAULT_DET_INTERVENTIONS,

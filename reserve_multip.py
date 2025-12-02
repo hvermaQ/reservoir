@@ -1,7 +1,7 @@
 import multiprocessing
 from sklearn.neural_network import MLPRegressor
 import matplotlib.pyplot as plt
-from gen_dat import generate_data
+from data_gen import generate_data
 from reserve_mem import reservoir_with_qubit_reuse, extract_sigmaz_reset_with_washout, make_lagged_features
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, root_mean_squared_error
 

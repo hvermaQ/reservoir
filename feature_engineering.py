@@ -64,43 +64,51 @@ def create_lagged_binary_features(
 
 # ---------------------------------------------------------------------
 # Extract <σ_z> from reservoir result with washout support
-# ---------------------------------------------------------------------
+# -------------------------------------------------------------------
 
-def extract_sigmaz_reset_with_washout(result, num_timesteps, washout_length=10):
+def extract_features_from_results(results_list, washout_length=5, discard_washout=True):
     """
-    Extract <σ_z> per timestep from a Result with intermediate measurements,
-    discarding the initial washout timesteps.
-
+    Extract features from list of Results, discarding initial washout timesteps.
+    
     Parameters
     ----------
-    result : qat.core.Result
-        Result object from reservoir circuit with intermediate measurements.
-    num_timesteps : int
-        Number of intermediate measurements to extract (including washout).
+    results_list : list of qat.core.Result
     washout_length : int
-        Number of initial timesteps to discard.
-
+        Number of initial timesteps per circuit to discard.
+    discard_washout : bool
+        If True, return features only after washout period.
+        If False, return all timesteps (for debugging).
+        
     Returns
     -------
-    sigmaz : np.ndarray, shape (num_timesteps - washout_length,)
-        Expectation values <σ_z> of system qubit for each timestep.
+    features : np.ndarray, shape (num_windows,) or (num_windows, window_size-washout)
     """
-    bit1_prob = np.zeros(num_timesteps)
-    total_prob = 0.0
+    features = []
+    
+    for result in results_list:
+        bit1_probs = np.zeros(len(result.raw_data[0].intermediate_measurements))
+        total_prob = 0.0
 
-    for sample in result.raw_data:
-        prob = sample.probability if hasattr(sample, "probability") else sample["probability"]
-        total_prob += prob
+        for sample in result.raw_data:
+            prob = sample.probability if hasattr(sample, "probability") else sample["probability"]
+            total_prob += prob
+            
+            for t, meas in enumerate(sample.intermediate_measurements):
+                cbit_val = meas.cbits[0] if hasattr(meas, "cbits") else meas["cbits"][0]
+                if cbit_val == 1:
+                    bit1_probs[t] += prob
 
-        for t in range(num_timesteps):
-            meas_idx = t  # intermediate measurement index
-            int_meas = sample.intermediate_measurements[meas_idx]
-            cbit_val = int_meas.cbits[0] if hasattr(int_meas, "cbits") else int_meas["cbits"][0]
-            if cbit_val == 1:
-                bit1_prob[t] += prob
+        sigmaz = 1 - 2 * (bit1_probs / total_prob) if total_prob > 0 else np.ones_like(bit1_probs)
+        
+        if discard_washout:
+            # Discard first washout_length timesteps, keep window timesteps only
+            window_features = sigmaz[washout_length:]
+            # Use final feature of window or mean
+            feature = window_features[-1]  # Last timestep after washout
+            # feature = np.mean(window_features)  # Alternative: average
+        else:
+            feature = sigmaz[-1]  # Full sequence final timestep
+            
+        features.append(feature)
 
-    if total_prob == 0:
-        return np.ones(num_timesteps - washout_length)
-
-    sigmaz = 1 - 2 * (bit1_prob / total_prob)
-    return sigmaz[washout_length:]
+    return np.array(features)
