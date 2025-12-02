@@ -15,25 +15,7 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_sco
 from data_gen import generate_data
 from reservoir_gen import reservoir_results_per_window, DEFAULT_DET_INTERVENTIONS
 from feature_engineering import create_lagged_binary_features, extract_features_from_results
-
-# Configuration
-CONFIG = {
-    'target': 'AAPL',
-    'strike': 500,
-    'option_type': 'call',
-    'expiry': '2013-01-19',
-    'dt': 1.75,
-    'washout_length': 0,  # Set >0 to test initialization effects
-    'window_lags': 5,
-    'memory_sizes': [2, 3, 4, 5],
-    'model_keys': ['XXZ', 'NNN_CHAOTIC', 'NNN_LOCALIZED', 'IAA_CHAOTIC', 'IAA_LOCALIZED'],
-    #'model_keys': ['NNN_CHAOTIC', 'NNN_LOCALIZED'],
-    'shots': 256,
-    'n_steps': 1,
-    'train_split': 0.8,
-    'mlp_layers': (2,),
-    'mlp_max_iter': 500
-}
+from config import CONFIG
 
 print("=== QUANTUM RESERVOIR COMPUTING PIPELINE ===")
 print(f"Washout length: {CONFIG['washout_length']}")
