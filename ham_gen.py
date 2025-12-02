@@ -16,7 +16,7 @@ All gates act on Atos QLM-style qubits via an existing Program `pr`.
 """
 
 import numpy as np
-from qat.lang.AQASM import CNOT, RX, RZ, H
+from qat.lang.AQASM import CNOT, RX, RZ, RY, H
 
 # ---------------------------------------------------------------------------
 # Global Hamiltonian parameters (edit these to tune regimes)
@@ -72,38 +72,40 @@ HAM_PARAMS = {
 # ---------------------------------------------------------------------------
 # Helper: two-qubit ZZ, XX, YY gates via native rotations
 # ---------------------------------------------------------------------------
-
 def apply_zz(pr, q_control, q_target, angle):
-    """
-    Implement exp(-i * angle/2 * σ_z ⊗ σ_z) as CNOT - RZ(angle) - CNOT.
-    """
+    """Implement exp(-i * angle/2 * σ_z ⊗ σ_z). Safe if q_control == q_target."""
+    # CNOT-based construction
     pr.apply(CNOT, q_control, q_target)
     pr.apply(RZ(angle), q_target)
     pr.apply(CNOT, q_control, q_target)
 
+def apply_xx(pr, q_control, q_target, angle):
+    # Z→X
+    pr.apply(H, q_control)
+    pr.apply(H, q_target)
+    # ZZ in X basis
+    pr.apply(CNOT, q_control, q_target)
+    pr.apply(RZ(angle), q_target)
+    pr.apply(CNOT, q_control, q_target)
+    # X→Z
+    pr.apply(H, q_control)
+    pr.apply(H, q_target)
 
-def apply_xx(pr, q0, q1, angle):
+def apply_yy(pr, q_control, q_target, angle):
     """
-    Implement exp(-i * angle/2 * σ_x ⊗ σ_x) via basis change:
-      H on both → ZZ(angle) → H on both.
+    Implement exp(-i * angle/2 * σ_y ⊗ σ_y).
+    Safe if q_control == q_target: reduces to a single-qubit RY.
     """
-    pr.apply(H, q0)
-    pr.apply(H, q1)
-    apply_zz(pr, q0, q1, angle)
-    pr.apply(H, q0)
-    pr.apply(H, q1)
-
-
-def apply_yy(pr, q0, q1, angle):
-    """
-    Implement exp(-i * angle/2 * σ_y ⊗ σ_y) via:
-      RX(+π/2) on both → ZZ(angle) → RX(-π/2) on both.
-    """
-    pr.apply(RX(+np.pi / 2.0), q0)
-    pr.apply(RX(+np.pi / 2.0), q1)
-    apply_zz(pr, q0, q1, angle)
-    pr.apply(RX(-np.pi / 2.0), q0)
-    pr.apply(RX(-np.pi / 2.0), q1)
+    # Basis chanßge Z→Y on both qubits
+    pr.apply(RZ(0.5 * np.pi), q_control)
+    pr.apply(RZ(0.5 * np.pi), q_target)
+    # ZZ in the rotated basis
+    pr.apply(CNOT, q_control, q_target)
+    pr.apply(RZ(angle), q_target)
+    pr.apply(CNOT, q_control, q_target)
+    # Rotate back
+    pr.apply(RZ(-0.5 * np.pi), q_control)
+    pr.apply(RZ(-0.5 * np.pi), q_target)
 
 
 # ---------------------------------------------------------------------------

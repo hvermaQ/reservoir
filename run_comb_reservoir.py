@@ -25,8 +25,9 @@ CONFIG = {
     'dt': 1.75,
     'washout_length': 0,  # Set >0 to test initialization effects
     'window_lags': 5,
-    'memory_sizes': [1, 2],
+    'memory_sizes': [2, 3, 4, 5],
     'model_keys': ['XXZ', 'NNN_CHAOTIC', 'NNN_LOCALIZED', 'IAA_CHAOTIC', 'IAA_LOCALIZED'],
+    #'model_keys': ['NNN_CHAOTIC', 'NNN_LOCALIZED'],
     'shots': 256,
     'n_steps': 1,
     'train_split': 0.8,
@@ -74,63 +75,57 @@ def prepare_data_pipeline():
 def run_single_config(args):
     """Execute reservoir + MLP for one model-memory config."""
     model_key, mem_size, X_windows, y_targets = args
-    model_kwargs = {'userandom': True} if model_key.startswith('NNN') else {}
+    model_kwargs = {'use_random': True} if model_key.startswith('NNN') else {}
     
-    try:
-        # Reservoir evolution (per-window, washout handled internally)
-        results_list = reservoir_results_per_window(
-            X_windows=X_windows,
-            model_key=model_key,
-            num_memory=mem_size,
-            shots=CONFIG['shots'],
-            dt=CONFIG['dt'],
-            n_steps=CONFIG['n_steps'],
-            det_basis=DEFAULT_DET_INTERVENTIONS,
-            model_kwargs=model_kwargs,
-            washout_length=CONFIG['washout_length']
-        )
+    results_list = reservoir_results_per_window(
+        X_windows=X_windows,
+        model_key=model_key,
+        num_memory=mem_size,
+        shots=CONFIG['shots'],
+        dt=CONFIG['dt'],
+        n_steps=CONFIG['n_steps'],
+        det_basis=DEFAULT_DET_INTERVENTIONS,
+        model_kwargs=model_kwargs,
+        washout_length=CONFIG['washout_length']
+    )
         
-        # Feature extraction (post-washout)
-        features = extract_features_from_results(
-            results_list, 
-            washout_length=CONFIG['washout_length']
-        )
-        features = features[:len(y_targets)]  # Align with targets
-        
-        # Train/test split
-        split_idx = int(CONFIG['train_split'] * len(y_targets))
-        X_train, X_test = features[:split_idx].reshape(-1, 1), features[split_idx:].reshape(-1, 1)
-        y_train, y_test = y_targets[:split_idx], y_targets[split_idx:]
-        
-        # MLP readout
-        mlp = MLPRegressor(
-            hidden_layer_sizes=CONFIG['mlp_layers'],
-            max_iter=CONFIG['mlp_max_iter'],
-            random_state=0
-        )
-        mlp.fit(X_train, y_train)
-        y_pred = mlp.predict(X_test)
-        
-        # Metrics
-        metrics = {
-            'MAE': mean_absolute_error(y_test, y_pred),
-            'RMSE': root_mean_squared_error(y_test, y_pred),
-            'R2': r2_score(y_test, y_pred)
-        }
-        
-        print(f"   {model_key}_M{mem_size}: MAE={metrics['MAE']:.4f}, "
-              f"RMSE={metrics['RMSE']:.4f}, R2={metrics['R2']:.4f}")
-        
-        return {
-            'model_key': model_key,
-            'mem_size': mem_size,
-            **metrics,
-            'loss_curve': mlp.loss_curve_
-        }
-        
-    except Exception as e:
-        print(f"   ERROR {model_key}_M{mem_size}: {str(e)}")
-        return None
+    # Feature extraction (post-washout)
+    features = extract_features_from_results(
+        results_list, 
+        washout_length=CONFIG['washout_length']
+    )
+    features = features[:len(y_targets)]  # Align with targets
+    
+    # Train/test split
+    split_idx = int(CONFIG['train_split'] * len(y_targets))
+    X_train, X_test = features[:split_idx].reshape(-1, 1), features[split_idx:].reshape(-1, 1)
+    y_train, y_test = y_targets[:split_idx], y_targets[split_idx:]
+    
+    # MLP readout
+    mlp = MLPRegressor(
+        hidden_layer_sizes=CONFIG['mlp_layers'],
+        max_iter=CONFIG['mlp_max_iter'],
+        random_state=0
+    )
+    mlp.fit(X_train, y_train)
+    y_pred = mlp.predict(X_test)
+    
+    # Metrics
+    metrics = {
+        'MAE': mean_absolute_error(y_test, y_pred),
+        'RMSE': root_mean_squared_error(y_test, y_pred),
+        'R2': r2_score(y_test, y_pred)
+    }
+    
+    print(f"   {model_key}_M{mem_size}: MAE={metrics['MAE']:.4f}, "
+            f"RMSE={metrics['RMSE']:.4f}, R2={metrics['R2']:.4f}")
+    
+    return {
+        'model_key': model_key,
+        'mem_size': mem_size,
+        **metrics,
+        'loss_curve': mlp.loss_curve_
+    }
 
 def visualize_results(all_results):
     """Generate loss curves and MAE heatmap."""
@@ -206,12 +201,18 @@ if __name__ == '__main__':
              for model in CONFIG['model_keys'] 
              for mem in CONFIG['memory_sizes']]
     
-    print(f"3. Launching {len(tasks)} configurations (4 workers)...")
+    print(f"3. Launching {len(tasks)} configurations in parallel...")
     
     # Multiprocessing execution
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.Pool(processes = 10) as pool:
         all_results = pool.map(run_single_config, tasks)
-    
+
+    #serial loop for testing
+    #all_results = []
+    #for task in tasks:
+    #    result = run_single_config(task)
+    #    all_results.append(result)
+
     # Analysis and visualization
     print("4. Generating visualizations...")
     visualize_results(all_results)

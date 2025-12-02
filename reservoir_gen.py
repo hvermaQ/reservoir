@@ -77,6 +77,7 @@ def reservoir_results_per_window(
             pr.reset([q_anc[0]])
 
         circuit = pr.to_circ()
+        #circuit.display()
         job = circuit.to_job(nbshots=shots)
         result = qpu.submit(job)
         all_results.append(result)

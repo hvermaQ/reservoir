@@ -5,7 +5,7 @@ import glob
 import os
 data_folder = './2013-01'  # Path to optiondata.org files
 
-def generate_data(ticker):
+def generate_data(ticker, minmax_criteria=(0.8, 1.2)):
     # --- 1. LOAD ALL OPTIONS FILES ---
     option_files = sorted(glob.glob(os.path.join(data_folder, '*options.csv')))
     option_dfs = []
@@ -51,7 +51,7 @@ def generate_data(ticker):
     # --- 5. DETERMINE STRIKE PRICE WINDOW USING FIRST DAY SPOT PRICE ---
     first_day = merged['date'].min()
     first_day_spot = merged.loc[merged['date'] == first_day, 'spot'].iloc[0]
-    low_strike, high_strike = 0.8 * first_day_spot, 1.2 * first_day_spot
+    low_strike, high_strike = minmax_criteria[0] * first_day_spot, minmax_criteria[1] * first_day_spot
 
     # --- 6. FILTER STRIKES WITHIN ±20% OF FIRST-DAY SPOT ---
     filtered = merged[(merged['strike'] >= low_strike) & (merged['strike'] <= high_strike)].copy()
