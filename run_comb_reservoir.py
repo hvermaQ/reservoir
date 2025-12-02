@@ -111,7 +111,7 @@ def run_single_config(args):
     # Extract reservoir features from intermediate measurements
     reservoir_features = extract_sigmaz_reset_with_washout(
         result,
-        n_steps=len(x_seq),
+        num_timesteps=len(x_seq),
         washout_length=WASHOUT_LENGTH,
     )
     reservoir_features = reservoir_features[-len(targets):]

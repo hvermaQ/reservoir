@@ -31,11 +31,6 @@ dates, deviations = get_deviation_timeseries(
     raw_data, strike=500, option_type="call", expiry="2013-01-19"
 )
 
-
-dates, deviations = get_deviation_timeseries(
-    raw_data, strike=500, option_type="call", expiry="2013-01-19"
-)
-
 print("=== PIPELINE DIAGNOSIS REPORT ===\n")
 
 # ---------------------------------------------------------------------
@@ -68,75 +63,41 @@ except Exception as e:
 print()
 
 # ---------------------------------------------------------------------
-# STEP 3: RESERVOIR INPUT PREP
-print("3. RESERVOIR INPUT PREPARATION")
-reservoir_input = X[:, -1]  # Last label per window
-print(f"   Reservoir input length: {len(reservoir_input)}")
-print(f"   Input label range: {reservoir_input.min()} to {reservoir_input.max()}")
-print(f"   Sample input: {reservoir_input[:10]}")
-print("   ✓ INPUT PREP OK")
-print()
+# STEP 4: SINGLE RESERVOIR CALL (ALL MODELS)
+print("4. SINGLE RESERVOIR CALL (ALL MODELS)")
+MODEL_KEYS = ["XXZ", "NNN_CHAOTIC", "NNN_LOCALIZED", "IAA_CHAOTIC", "IAA_LOCALIZED"]
 
-# ---------------------------------------------------------------------
-# STEP 4: SINGLE RESERVOIR CALL (XXZ, minimal params)
-print("4. SINGLE RESERVOIR CALL (XXZ)")
-try:
-    print("   Testing XXZ model...")
-    result_xxz = reservoir_from_binary_sequence(
-        x_seq=reservoir_input[:20],  # Short sequence for speed
-        model_key="XXZ",
-        num_memory=2,
-        shots=64,  # Reduced shots for diagnosis
-        dt=1.75,
-        n_steps=1,
-        det_basis=DEFAULT_DET_INTERVENTIONS,
-        model_kwargs={},
-    )
-    print(f"   XXZ result obtained: {type(result_xxz)}")
-    print("   ✓ XXZ RESERVOIR OK")
-except Exception as e:
-    print(f"   ✗ XXZ RESERVOIR FAILED: {e}")
-    raise
-print()
-
-# ---------------------------------------------------------------------
-# STEP 5: FEATURE EXTRACTION
-print("5. FEATURE EXTRACTION")
-try:
-    features = extract_sigmaz_reset_with_washout(
-        result_xxz,
-        n_steps=len(reservoir_input[:20]),
-        washout_length=0,
-    )
-    print(f"   Features shape: {features.shape}")
-    print(f"   Features range: {features.min():.4f} to {features.max():.4f}")
-    print(f"   Features mean: {features.mean():.4f}")
-    print("   ✓ EXTRACTION OK")
-except Exception as e:
-    print(f"   ✗ EXTRACTION FAILED: {e}")
-    raise
-print()
-
-# ---------------------------------------------------------------------
-# STEP 6: TEST NNN MODEL (with model_kwargs)
-print("6. NNN CHAOTIC MODEL (with model_kwargs)")
-try:
-    print("   Testing NNN_CHAOTIC with use_random=True...")
-    result_nnn = reservoir_from_binary_sequence(
-        x_seq=reservoir_input[:20],
-        model_key="NNN_CHAOTIC",
-        num_memory=2,
-        shots=64,
-        dt=1.75,
-        n_steps=1,
-        det_basis=DEFAULT_DET_INTERVENTIONS,
-        model_kwargs={"use_random": True},
-    )
-    print(f"   NNN result obtained: {type(result_nnn)}")
-    print("   ✓ NNN RESERVOIR OK")
-except Exception as e:
-    print(f"   ✗ NNN RESERVOIR FAILED: {e}")
-    print("   Check model_kwargs serialization...")
+for model_key in MODEL_KEYS:
+    try:
+        print(f"   Testing {model_key} model...")
+        model_kwargs = {"use_random": True} if model_key.startswith("NNN") else {}
+        
+        result = reservoir_from_binary_sequence(
+            x_seq=X,  # Short sequence for speed
+            model_key=model_key,
+            num_memory=2,
+            shots=64,  # Reduced shots for diagnosis
+            dt=1.75,
+            n_steps=1,
+            det_basis=DEFAULT_DET_INTERVENTIONS,
+            model_kwargs=model_kwargs,
+        )
+        print(f"   ✓ {model_key} RESERVOIR OK: {type(result)}")
+        
+        # Test feature extraction immediately for this result
+        features = extract_sigmaz_reset_with_washout(
+            result,
+            num_timesteps=len(X),  # Updated parameter name
+            washout_length=0,
+        )
+        print(features)
+        print(f"      Features shape: {features.shape}, range: [{features.min():.3f}, {features.max():.3f}]")
+        
+    except Exception as e:
+        print(f"   ✗ {model_key} RESERVOIR FAILED: {e}")
+        import traceback
+        traceback.print_exc()
+        break  # Stop on first failure
 print()
 
 # ---------------------------------------------------------------------
