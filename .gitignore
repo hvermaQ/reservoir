@@ -4,3 +4,6 @@ __pycache__/
 reserve_loop.py
 reserve_end_to_end.py
 2013-01/
+*.png
+*.npy
+*.json

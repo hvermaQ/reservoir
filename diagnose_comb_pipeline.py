@@ -52,8 +52,8 @@ print()
 # ---------------------------------------------------------------------
 # STEP 2: BINARIZATION + LAGGED FEATURES
 print("2. BINARIZATION + LAGGED FEATURES")
-WINDOW_LAGS = 5
-WASHOUT_LENGTH = 0  # For diagnosis
+WINDOW_LAGS = 8
+WASHOUT_LENGTH = 7  # For diagnosis
 try:
     X, y = create_lagged_binary_features(
         deviations, lag_window=WINDOW_LAGS, sigma_threshold=1.0, two_sigma_threshold=2.0

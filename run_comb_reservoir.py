@@ -13,8 +13,8 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_sco
 
 # Core modules
 from data_gen import generate_data
-from reservoir_gen import reservoirresultsperwindow, DEFAULTDETINTERVENTIONS
-from feature_engineering import create_lagged_binary_features, extractfeaturesfromresults
+from reservoir_gen import reservoir_results_per_window, DEFAULT_DET_INTERVENTIONS
+from feature_engineering import create_lagged_binary_features, extract_features_from_results
 
 # Configuration
 CONFIG = {
@@ -26,7 +26,7 @@ CONFIG = {
     'washout_length': 0,  # Set >0 to test initialization effects
     'window_lags': 5,
     'memory_sizes': [1, 2],
-    'model_keys': ['XXZ', 'NNNCHAOTIC', 'NNNLOCALIZED', 'IAACHAOTIC', 'IAALOCALIZED'],
+    'model_keys': ['XXZ', 'NNN_CHAOTIC', 'NNN_LOCALIZED', 'IAA_CHAOTIC', 'IAA_LOCALIZED'],
     'shots': 256,
     'n_steps': 1,
     'train_split': 0.8,
@@ -78,20 +78,20 @@ def run_single_config(args):
     
     try:
         # Reservoir evolution (per-window, washout handled internally)
-        results_list = reservoirresultsperwindow(
+        results_list = reservoir_results_per_window(
             X_windows=X_windows,
             model_key=model_key,
             num_memory=mem_size,
             shots=CONFIG['shots'],
             dt=CONFIG['dt'],
             n_steps=CONFIG['n_steps'],
-            det_basis=DEFAULTDETINTERVENTIONS,
+            det_basis=DEFAULT_DET_INTERVENTIONS,
             model_kwargs=model_kwargs,
             washout_length=CONFIG['washout_length']
         )
         
         # Feature extraction (post-washout)
-        features = extractfeaturesfromresults(
+        features = extract_features_from_results(
             results_list, 
             washout_length=CONFIG['washout_length']
         )
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     print(f"3. Launching {len(tasks)} configurations (4 workers)...")
     
     # Multiprocessing execution
-    with multiprocessing.Pool(processes=4) as pool:
+    with multiprocessing.Pool() as pool:
         all_results = pool.map(run_single_config, tasks)
     
     # Analysis and visualization
