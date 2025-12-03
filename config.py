@@ -11,7 +11,7 @@ CONFIG = {
     'model_keys': ['XXZ', 'NNN_CHAOTIC', 'NNN_LOCALIZED', 'IAA_CHAOTIC', 'IAA_LOCALIZED'],
     #'model_keys': ['NNN_CHAOTIC', 'NNN_LOCALIZED'],
     'shots': 1024,
-    'n_steps': 1,
+    'n_steps': 5,
     'train_split': 0.8,
     'mlp_layers': (2,),
     'mlp_max_iter': 500

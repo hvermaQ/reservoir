@@ -112,3 +112,122 @@ def extract_features_from_results(results_list, washout_length=5, discard_washou
         features.append(feature)
 
     return np.array(features)
+
+
+def create_lagged_quantile_features(values, lag_window):
+    """
+    Quantile-based symbolic encoding into 4 bins.
+    Consistent, stationary, suitable for quantum reservoirs.
+    """
+    vals = np.asarray(values, dtype=float)
+    T = len(vals)
+    
+    # Compute global quantiles once
+    q1, q2, q3 = np.quantile(vals, [0.25, 0.5, 0.75])
+
+    # Encode into symbolic alphabet {0,1,2,3}
+    encoded = np.digitize(vals, bins=[q1, q2, q3])  # returns 0,1,2,3
+    
+    # Build lagged windows predicting next value
+    X_list, y_list = [], []
+    for t in range(lag_window - 1, T - 1):
+        X_list.append(encoded[t - lag_window + 1 : t + 1])
+        y_list.append(vals[t + 1])
+
+    return np.array(X_list), np.array(y_list)
+
+
+# -------------------------------------------------------------
+# 1) Extract ⟨Z⟩(t) from intermediate measurements after washout
+# -------------------------------------------------------------
+
+def extract_features(results_list, washout_length=5):
+    """
+    Convert QPU results (with intermediate weak measurements)
+    into per-timestep expectation values <Z_t> for each window.
+
+    Returns
+    -------
+    np.ndarray of shape (num_windows, window_length)
+    """
+    all_features = []
+
+    for result in results_list:
+        # Number of timesteps = number of weak measurements
+        num_steps = len(result.raw_data[0].intermediate_measurements)
+
+        p1 = np.zeros(num_steps)
+        total_prob = 0.0
+
+        # Accumulate probabilities of ancilla=1 at each timestep
+        for sample in result.raw_data:
+            prob = sample.probability
+            total_prob += prob
+
+            for t, meas in enumerate(sample.intermediate_measurements):
+                bit = meas.cbits[0]     # ancilla measurement outcome
+                if bit == 1:
+                    p1[t] += prob
+
+        # Compute <Z> = 1 - 2 P(ancilla=1)
+        ez = 1 - 2 * (p1 / total_prob)
+
+        # Remove washout, keep only effective timesteps
+        post_ez = ez[washout_length:]
+
+        all_features.append(post_ez)
+
+    return np.vstack(all_features)
+
+
+# -------------------------------------------------------------
+# 2) Compress per-timestep feature vectors into scalars
+# -------------------------------------------------------------
+
+def postprocess_features(feature_vectors, mode="full"):
+    """
+    Convert each per-window feature vector (length = window_size)
+    into a final scalar feature.
+
+    Options:
+        "last"  -> final timestep after washout (recommended)
+        "mean"  -> average over all timesteps
+        "sum"   -> sum of <Z_t>
+        "pca1"  -> first principal component
+    """
+
+    if mode == "last":
+        return feature_vectors[:, -1]
+
+    elif mode == "full":
+        return feature_vectors
+
+    elif mode == "mean":
+        return np.mean(feature_vectors, axis=1)
+
+    elif mode == "sum":
+        return np.sum(feature_vectors, axis=1)
+
+    elif mode == "pca1":
+        from sklearn.decomposition import PCA
+        return PCA(n_components=1).fit_transform(feature_vectors).flatten()
+
+    else:
+        raise ValueError(f"Unknown compression mode: {mode}")
+
+
+# -------------------------------------------------------------
+# 3) Simple wrapper: from raw reservoir results → final features
+# -------------------------------------------------------------
+
+def features_from_results(results_list, washout_length=5, compress_mode="last"):
+    """
+    Full post-processing pipeline:
+       1. Extract <Z_t> per timestep after washout
+       2. Compress to scalar per window
+    """
+    feature_vectors = extract_features(results_list, washout_length=washout_length)
+
+    final_features = postprocess_features(feature_vectors, mode=compress_mode)
+
+    return final_features
