@@ -14,5 +14,6 @@ CONFIG = {
     'n_steps': 5,
     'train_split': 0.8,
     'mlp_layers': (2,),
-    'mlp_max_iter': 500
+    'mlp_max_iter': 500,
+    'epsilon': 0.25  # weak measurement angle
 }

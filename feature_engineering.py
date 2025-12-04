@@ -141,93 +141,60 @@ def create_lagged_quantile_features(values, lag_window):
 # 1) Extract ⟨Z⟩(t) from intermediate measurements after washout
 # -------------------------------------------------------------
 
-def extract_features(results_list, washout_length=5):
-    """
+def extract_features_weak(results_list, washout_length=5, ancilla_cbit=0):
+    """ß
     Convert QPU results (with intermediate weak measurements)
     into per-timestep expectation values <Z_t> for each window.
+    Parameters
+    ----------
+    results_list : list
+        List of Result objects from the QPU.
+    washout_length : int
+        Number of initial timesteps to discard (washout).
+    ancilla_cbit : int
+        Classical bit index corresponding to the ancilla qubit.
 
     Returns
     -------
     np.ndarray of shape (num_windows, window_length)
+        Each row corresponds to one input window, containing <Z> per timestep.
     """
     all_features = []
 
     for result in results_list:
-        # Number of timesteps = number of weak measurements
-        num_steps = len(result.raw_data[0].intermediate_measurements)
+        # Dictionary: timestep -> accumulated P(ancilla=1)
+        p1_dict = {}
+        total_prob_dict = {}
 
-        p1 = np.zeros(num_steps)
-        total_prob = 0.0
-
-        # Accumulate probabilities of ancilla=1 at each timestep
         for sample in result.raw_data:
             prob = sample.probability
-            total_prob += prob
 
-            for t, meas in enumerate(sample.intermediate_measurements):
-                bit = meas.cbits[0]     # ancilla measurement outcome
-                if bit == 1:
-                    p1[t] += prob
+            for meas in sample.intermediate_measurements:
+                # Only consider the ancilla classical bit
+                if ancilla_cbit in meas.cbits:
+                    t_idx = meas.gate_pos  # use gate_pos as unique timestep identifier
+                    # Accumulate probability of ancilla=1
+                    bit = meas.cbits[0]  # assuming single ancilla bit
+                    if t_idx not in p1_dict:
+                        p1_dict[t_idx] = 0.0
+                        total_prob_dict[t_idx] = 0.0
+                    if bit == 1:
+                        p1_dict[t_idx] += prob
+                    total_prob_dict[t_idx] += prob
 
-        # Compute <Z> = 1 - 2 P(ancilla=1)
-        ez = 1 - 2 * (p1 / total_prob)
+        # Sort timesteps by gate_pos to get chronological order
+        sorted_steps = sorted(p1_dict.keys())
+        ez_list = []
+        for t in sorted_steps:
+            # Avoid division by zero
+            if total_prob_dict[t] == 0:
+                ez_list.append(1.0)  # default <Z>=1 if no data
+            else:
+                ez_list.append(1 - 2 * (p1_dict[t] / total_prob_dict[t]))
 
-        # Remove washout, keep only effective timesteps
-        post_ez = ez[washout_length:]
-
-        all_features.append(post_ez)
+        ez_array = np.array(ez_list)
+        # Remove washout steps
+        ez_post = ez_array[washout_length:]
+        all_features.append(ez_post)
 
     return np.vstack(all_features)
-
-
-# -------------------------------------------------------------
-# 2) Compress per-timestep feature vectors into scalars
-# -------------------------------------------------------------
-
-def postprocess_features(feature_vectors, mode="full"):
-    """
-    Convert each per-window feature vector (length = window_size)
-    into a final scalar feature.
-
-    Options:
-        "last"  -> final timestep after washout (recommended)
-        "mean"  -> average over all timesteps
-        "sum"   -> sum of <Z_t>
-        "pca1"  -> first principal component
-    """
-
-    if mode == "last":
-        return feature_vectors[:, -1]
-
-    elif mode == "full":
-        return feature_vectors
-
-    elif mode == "mean":
-        return np.mean(feature_vectors, axis=1)
-
-    elif mode == "sum":
-        return np.sum(feature_vectors, axis=1)
-
-    elif mode == "pca1":
-        from sklearn.decomposition import PCA
-        return PCA(n_components=1).fit_transform(feature_vectors).flatten()
-
-    else:
-        raise ValueError(f"Unknown compression mode: {mode}")
-
-
-# -------------------------------------------------------------
-# 3) Simple wrapper: from raw reservoir results → final features
-# -------------------------------------------------------------
-
-def features_from_results(results_list, washout_length=5, compress_mode="last"):
-    """
-    Full post-processing pipeline:
-       1. Extract <Z_t> per timestep after washout
-       2. Compress to scalar per window
-    """
-    feature_vectors = extract_features(results_list, washout_length=washout_length)
-
-    final_features = postprocess_features(feature_vectors, mode=compress_mode)
-
-    return final_features
