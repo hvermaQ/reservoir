@@ -1,0 +1,458 @@
+{
+  "args": {
+    "W": 16,
+    "n_per_class": 2500,
+    "noise": 0.0,
+    "num_memory": [
+      4,
+      6
+    ],
+    "models": [
+      "XXZ",
+      "IAA_CHAOTIC",
+      "IAA_LOCALIZED"
+    ],
+    "total_time": [
+      0.2
+    ],
+    "reupload": [
+      1,
+      2
+    ],
+    "shots": [
+      0,
+      512
+    ]
+  },
+  "baselines": {
+    "majority": {
+      "acc": 0.25,
+      "balanced_acc": 0.25
+    },
+    "logistic": {
+      "acc": 0.265,
+      "balanced_acc": 0.265,
+      "n_features": 16
+    },
+    "rbf_svm": {
+      "acc": 0.7896666666666666,
+      "balanced_acc": 0.7896666666666667
+    },
+    "rff_416": {
+      "acc": 0.943,
+      "balanced_acc": 0.943,
+      "n_features": 416,
+      "gamma": 0.5
+    }
+  },
+  "records": [
+    {
+      "model": "XXZ",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.7316666666666667,
+        "balanced_acc": 0.7316666666666667,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.8063333333333333,
+        "balanced_acc": 0.8063333333333333,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5133333333333333,
+        "balanced_acc": 0.5133333333333333,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.549,
+        "balanced_acc": 0.5489999999999999,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.8456666666666667,
+        "balanced_acc": 0.8456666666666666,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.8896666666666667,
+        "balanced_acc": 0.8896666666666667,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5563333333333333,
+        "balanced_acc": 0.5563333333333333,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.6163333333333333,
+        "balanced_acc": 0.6163333333333334,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.7226666666666667,
+        "balanced_acc": 0.7226666666666667,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.8063333333333333,
+        "balanced_acc": 0.8063333333333333,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5123333333333333,
+        "balanced_acc": 0.5123333333333333,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.549,
+        "balanced_acc": 0.5489999999999999,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.8556666666666667,
+        "balanced_acc": 0.8556666666666668,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.8896666666666667,
+        "balanced_acc": 0.8896666666666667,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.564,
+        "balanced_acc": 0.564,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.6163333333333333,
+        "balanced_acc": 0.6163333333333334,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.6933333333333334,
+        "balanced_acc": 0.6933333333333334,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.8063333333333333,
+        "balanced_acc": 0.8063333333333333,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 5,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.482,
+        "balanced_acc": 0.482,
+        "n_features": 144
+      },
+      "random_unitary": {
+        "acc": 0.549,
+        "balanced_acc": 0.5489999999999999,
+        "n_features": 144
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.8186666666666667,
+        "balanced_acc": 0.8186666666666668,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.8896666666666667,
+        "balanced_acc": 0.8896666666666667,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 5,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5576666666666666,
+        "balanced_acc": 0.5576666666666666,
+        "n_features": 288
+      },
+      "random_unitary": {
+        "acc": 0.6163333333333333,
+        "balanced_acc": 0.6163333333333334,
+        "n_features": 288
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.7596666666666667,
+        "balanced_acc": 0.7596666666666667,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.8186666666666667,
+        "balanced_acc": 0.8186666666666668,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.49433333333333335,
+        "balanced_acc": 0.4943333333333333,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.479,
+        "balanced_acc": 0.47900000000000004,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.8676666666666667,
+        "balanced_acc": 0.8676666666666666,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.9113333333333333,
+        "balanced_acc": 0.9113333333333333,
+        "n_features": 416
+      }
+    },
+    {
+      "model": "XXZ",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5156666666666667,
+        "balanced_acc": 0.5156666666666667,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.5576666666666666,
+        "balanced_acc": 0.5576666666666666,
+        "n_features": 416
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.7313333333333333,
+        "balanced_acc": 0.7313333333333333,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.8186666666666667,
+        "balanced_acc": 0.8186666666666668,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.501,
+        "balanced_acc": 0.501,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.479,
+        "balanced_acc": 0.47900000000000004,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.8556666666666667,
+        "balanced_acc": 0.8556666666666667,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.9113333333333333,
+        "balanced_acc": 0.9113333333333333,
+        "n_features": 416
+      }
+    },
+    {
+      "model": "IAA_CHAOTIC",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5576666666666666,
+        "balanced_acc": 0.5576666666666666,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.5576666666666666,
+        "balanced_acc": 0.5576666666666666,
+        "n_features": 416
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.71,
+        "balanced_acc": 0.71,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.8186666666666667,
+        "balanced_acc": 0.8186666666666668,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 7,
+      "reupload": 1,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.48433333333333334,
+        "balanced_acc": 0.4843333333333333,
+        "n_features": 208
+      },
+      "random_unitary": {
+        "acc": 0.479,
+        "balanced_acc": 0.47900000000000004,
+        "n_features": 208
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 0,
+      "quantum": {
+        "acc": 0.828,
+        "balanced_acc": 0.8280000000000001,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.9113333333333333,
+        "balanced_acc": 0.9113333333333333,
+        "n_features": 416
+      }
+    },
+    {
+      "model": "IAA_LOCALIZED",
+      "L": 7,
+      "reupload": 2,
+      "total_time": 0.2,
+      "shots": 512,
+      "quantum": {
+        "acc": 0.5563333333333333,
+        "balanced_acc": 0.5563333333333333,
+        "n_features": 416
+      },
+      "random_unitary": {
+        "acc": 0.5576666666666666,
+        "balanced_acc": 0.5576666666666666,
+        "n_features": 416
+      }
+    }
+  ]
+}

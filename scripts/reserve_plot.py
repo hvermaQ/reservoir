@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import json
 import glob
@@ -18,12 +19,12 @@ def plot_loss_and_error_vs_mem(mem_sizes=[4, 16, 64], figsize_loss=(12, 8), figs
         figsize_err: Figure size for error metrics plot
         error_metric: Which error metric to use for mean error plot ('MAE', 'RMSE', 'MSE')
     """
-    loss_files = sorted(glob.glob("ising_tfim_disorder/loss_curves_nsteps*_disorder*.npy"))
-    metrics_files = sorted(glob.glob("ising_tfim_disorder/error_metrics_nsteps*_disorder*.json"))
+    loss_files = sorted(glob.glob("results/ising_tfim_disorder/loss_curves_nsteps*_disorder*.npy"))
+    metrics_files = sorted(glob.glob("results/ising_tfim_disorder/error_metrics_nsteps*_disorder*.json"))
     
     if not loss_files or not metrics_files:
         print("Missing loss or metrics files.")
-        print("Directory contents:", sorted(glob.glob("ising_tfim_disorder/*")))
+        print("Directory contents:", sorted(glob.glob("results/ising_tfim_disorder/*")))
         return
     
     loss_data = {}

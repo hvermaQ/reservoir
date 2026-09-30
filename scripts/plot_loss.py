@@ -1,6 +1,7 @@
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import matplotlib.pyplot as plt
-from config import CONFIG
+from qrc.config import CONFIG
 
 base = f'dt{CONFIG["dt"]:.2f}_w{CONFIG["washout_length"]}'
 loss_curves = np.load(f'{base}_loss.npy', allow_pickle=True).item()

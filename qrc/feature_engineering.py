@@ -66,49 +66,51 @@ def create_lagged_binary_features(
 # Extract <σ_z> from reservoir result with washout support
 # -------------------------------------------------------------------
 
+def _sigmaz_from_counts(counts: dict, n_bits: int) -> np.ndarray:
+    """
+    Compute ⟨σ_z⟩ for each of n_bits classical bits from Qiskit counts.
+
+    Qiskit bitstrings are little-endian: rightmost char = classical bit 0.
+    """
+    total_shots = sum(counts.values())
+    bit1_count = np.zeros(n_bits)
+    for bitstring, count in counts.items():
+        bs = bitstring.replace(' ', '')
+        for t in range(n_bits):
+            idx = len(bs) - 1 - t
+            if idx >= 0 and bs[idx] == '1':
+                bit1_count[t] += count
+    return 1 - 2 * (bit1_count / total_shots) if total_shots > 0 else np.ones(n_bits)
+
+
 def extract_features_from_results(results_list, washout_length=5, discard_washout=True):
     """
-    Extract features from list of Results, discarding initial washout timesteps.
-    
+    Extract a scalar feature per window from Qiskit reservoir results.
+
     Parameters
     ----------
-    results_list : list of qat.core.Result
+    results_list : list of qiskit.result.Result
     washout_length : int
         Number of initial timesteps per circuit to discard.
     discard_washout : bool
-        If True, return features only after washout period.
-        If False, return all timesteps (for debugging).
-        
+        If True, return the last post-washout ⟨σ_z⟩ value per window.
+        If False, return the final timestep value across the full sequence.
+
     Returns
     -------
-    features : np.ndarray, shape (num_windows,) or (num_windows, window_size-washout)
+    features : np.ndarray, shape (num_windows,)
     """
     features = []
-    
     for result in results_list:
-        bit1_probs = np.zeros(len(result.raw_data[0].intermediate_measurements))
-        total_prob = 0.0
+        counts = result.get_counts()
+        n_total = len(next(iter(counts)).replace(' ', ''))
+        sigmaz = _sigmaz_from_counts(counts, n_total)
 
-        for sample in result.raw_data:
-            prob = sample.probability if hasattr(sample, "probability") else sample["probability"]
-            total_prob += prob
-            
-            for t, meas in enumerate(sample.intermediate_measurements):
-                cbit_val = meas.cbits[0] if hasattr(meas, "cbits") else meas["cbits"][0]
-                if cbit_val == 1:
-                    bit1_probs[t] += prob
-
-        sigmaz = 1 - 2 * (bit1_probs / total_prob) if total_prob > 0 else np.ones_like(bit1_probs)
-        
         if discard_washout:
-            # Discard first washout_length timesteps, keep window timesteps only
-            window_features = sigmaz[washout_length:]
-            # Use final feature of window or mean
-            feature = window_features[-1]  # Last timestep after washout
-            # feature = np.mean(window_features)  # Alternative: average
+            feature = sigmaz[washout_length:][-1]
         else:
-            feature = sigmaz[-1]  # Full sequence final timestep
-            
+            feature = sigmaz[-1]
+
         features.append(feature)
 
     return np.array(features)
@@ -142,59 +144,60 @@ def create_lagged_quantile_features(values, lag_window):
 # -------------------------------------------------------------
 
 def extract_features_weak(results_list, washout_length=5, ancilla_cbit=0):
-    """ß
-    Convert QPU results (with intermediate weak measurements)
-    into per-timestep expectation values <Z_t> for each window.
-    Parameters
-    ----------
-    results_list : list
-        List of Result objects from the QPU.
-    washout_length : int
-        Number of initial timesteps to discard (washout).
-    ancilla_cbit : int
-        Classical bit index corresponding to the ancilla qubit.
+    """
+    Convert Qiskit reservoir results (ancilla weak measurements) into
+    per-timestep ⟨Z⟩ arrays for each window, discarding the washout.
+
+    Each classical bit t holds the ancilla outcome at timestep t.
 
     Returns
     -------
-    np.ndarray of shape (num_windows, window_length)
-        Each row corresponds to one input window, containing <Z> per timestep.
+    np.ndarray of shape (num_windows, window_length - washout_length)
     """
     all_features = []
-
     for result in results_list:
-        # Dictionary: timestep -> accumulated P(ancilla=1)
-        p1_dict = {}
-        total_prob_dict = {}
-
-        for sample in result.raw_data:
-            prob = sample.probability
-
-            for meas in sample.intermediate_measurements:
-                # Only consider the ancilla classical bit
-                if ancilla_cbit in meas.cbits:
-                    t_idx = meas.gate_pos  # use gate_pos as unique timestep identifier
-                    # Accumulate probability of ancilla=1
-                    bit = meas.cbits[0]  # assuming single ancilla bit
-                    if t_idx not in p1_dict:
-                        p1_dict[t_idx] = 0.0
-                        total_prob_dict[t_idx] = 0.0
-                    if bit == 1:
-                        p1_dict[t_idx] += prob
-                    total_prob_dict[t_idx] += prob
-
-        # Sort timesteps by gate_pos to get chronological order
-        sorted_steps = sorted(p1_dict.keys())
-        ez_list = []
-        for t in sorted_steps:
-            # Avoid division by zero
-            if total_prob_dict[t] == 0:
-                ez_list.append(1.0)  # default <Z>=1 if no data
-            else:
-                ez_list.append(1 - 2 * (p1_dict[t] / total_prob_dict[t]))
-
-        ez_array = np.array(ez_list)
-        # Remove washout steps
-        ez_post = ez_array[washout_length:]
-        all_features.append(ez_post)
-
+        counts = result.get_counts()
+        n_total = len(next(iter(counts)).replace(' ', ''))
+        sigmaz = _sigmaz_from_counts(counts, n_total)
+        all_features.append(sigmaz[washout_length:])
     return np.vstack(all_features)
+
+
+def features_from_results(results_list, washout_length=5, compress_mode="full"):
+    """
+    Extract feature vectors from Qiskit reservoir results.
+
+    Parameters
+    ----------
+    results_list : list of qiskit.result.Result
+    washout_length : int
+        Initial timesteps to discard per circuit.
+    compress_mode : str
+        "full"  — return the entire post-washout ⟨σ_z⟩ sequence per window.
+                  Shape: (num_windows, window_size).
+        "last"  — return the final post-washout value per window.
+                  Shape: (num_windows,).
+        "mean"  — return the mean post-washout value per window.
+                  Shape: (num_windows,).
+
+    Returns
+    -------
+    np.ndarray of appropriate shape.
+    """
+    rows = []
+    for result in results_list:
+        counts = result.get_counts()
+        n_total = len(next(iter(counts)).replace(' ', ''))
+        sigmaz = _sigmaz_from_counts(counts, n_total)
+        post = sigmaz[washout_length:]
+
+        if compress_mode == "full":
+            rows.append(post)
+        elif compress_mode == "last":
+            rows.append(post[-1])
+        elif compress_mode == "mean":
+            rows.append(post.mean())
+        else:
+            raise ValueError(f"Unknown compress_mode: {compress_mode!r}")
+
+    return np.array(rows)

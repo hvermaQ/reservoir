@@ -1,214 +1,264 @@
-#instantiate reservoir here based on memory size
-from qat.lang.AQASM import Program, RY, RX, RZ, RY, CNOT
+"""
+reserve_mem.py — Qiskit implementation of the qubit-reuse quantum reservoir.
+
+Implements Heisenberg and Ising-TFIM reservoirs with disorder fields,
+qubit-reuse architecture, and mid-circuit sigma_z extraction.
+"""
+
 import numpy as np
-from qat.qpus import get_default_qpu
-import pandas as pd
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
 
-#trotterisation of heisenber interaction between qubit pairs
-def heisenberg_pair(pr, q1, q2, Jdt):
-    # XX
-    pr.apply(CNOT, q1, q2)
-    pr.apply(RX(-2*Jdt), q2)
-    pr.apply(CNOT, q1, q2)
-    # YY
-    pr.apply(RY(np.pi/2), q1)
-    pr.apply(RY(np.pi/2), q2)
-    pr.apply(CNOT, q1, q2)
-    pr.apply(RX(-2*Jdt), q2)
-    pr.apply(CNOT, q1, q2)
-    pr.apply(RY(-np.pi/2), q1)
-    pr.apply(RY(-np.pi/2), q2)
-    # ZZ
-    pr.apply(CNOT, q1, q2)
-    pr.apply(RZ(-2*Jdt), q2)
-    pr.apply(CNOT, q1, q2)
+_backend = AerSimulator(method='statevector')
 
-#nearest neighbour heisenberg between all block_qubits likely data + memory qubits
-def multi_qubit_heisenberg_block(pr, block_qubits, J, dt, n_steps):
+
+# ---------------------------------------------------------------------------
+# Trotterized Heisenberg two-qubit block
+# ---------------------------------------------------------------------------
+
+def heisenberg_pair(qc: QuantumCircuit, q1: int, q2: int, Jdt: float):
     """
-    Applies n_steps of Heisenberg Trotterized evolution on ALL pairs in block_qubits
+    Trotterized Heisenberg interaction on a qubit pair:
+
+        exp(+i·Jdt·(XX + YY + ZZ))
+
+    (The historical sign convention of this module is kept: angle = -2·Jdt,
+    equivalent to H = -J(XX+YY+ZZ). It is uniform across all three terms, so it
+    is a convention on the sign of J, not a bug.)
+
+    Each term uses the CNOT sandwich with the rotation on the qubit whose Pauli
+    propagates to both sites: RX on the CONTROL for XX, RZ on the TARGET for ZZ.
+    Putting RX on the target instead makes the sandwich collapse to a bare
+    single-qubit rotation, because CNOT·(I⊗X)·CNOT = I⊗X.
     """
+    angle = -2 * Jdt
+    # XX : CNOT · (Rx ⊗ I) · CNOT,  since CNOT·(X⊗I)·CNOT = X⊗X
+    qc.cx(q1, q2)
+    qc.rx(angle, q1)
+    qc.cx(q1, q2)
+    # YY : RX(π/2) basis change around ZZ,  since Rx(π/2)† Z Rx(π/2) = Y
+    qc.rx(np.pi / 2, q1)
+    qc.rx(np.pi / 2, q2)
+    qc.cx(q1, q2)
+    qc.rz(angle, q2)
+    qc.cx(q1, q2)
+    qc.rx(-np.pi / 2, q1)
+    qc.rx(-np.pi / 2, q2)
+    # ZZ : CNOT · (I ⊗ Rz) · CNOT,  since CNOT·(I⊗Z)·CNOT = Z⊗Z
+    qc.cx(q1, q2)
+    qc.rz(angle, q2)
+    qc.cx(q1, q2)
+
+
+def multi_qubit_heisenberg_block(
+    qc: QuantumCircuit, block_qubits: list, J: float, dt: float, n_steps: int
+):
+    """n_steps of Heisenberg Trotterization on all pairs in block_qubits."""
     for _ in range(n_steps):
         for i in range(len(block_qubits)):
-            for j in range(i+1, len(block_qubits)):
-                heisenberg_pair(pr, block_qubits[i], block_qubits[j], J*dt)
+            for j in range(i + 1, len(block_qubits)):
+                heisenberg_pair(qc, block_qubits[i], block_qubits[j], J * dt)
 
-# nearest neighbour Heisenberg between all block_qubits + random Z fields
-def multi_qubit_heisenberg_block_with_random(pr, block_qubits, J, dt, n_steps, h_scale=1.0, rng=None):
+
+def multi_qubit_heisenberg_block_with_random(
+    qc: QuantumCircuit,
+    block_qubits: list,
+    J: float,
+    dt: float,
+    n_steps: int,
+    h_scale: float = 1.0,
+    rng=None,
+):
+    """Heisenberg Trotterization with random on-site Z disorder fields."""
+    if rng is None:
+        rng = np.random.default_rng()
+    for _ in range(n_steps):
+        for i in range(len(block_qubits)):
+            for j in range(i + 1, len(block_qubits)):
+                heisenberg_pair(qc, block_qubits[i], block_qubits[j], J * dt)
+        h = h_scale * rng.uniform(-1.0, 1.0, size=len(block_qubits))
+        for q_idx, h_i in zip(block_qubits, h):
+            qc.rz(2.0 * h_i * dt, q_idx)
+
+
+def multi_qubit_ising_block_with_random(
+    qc: QuantumCircuit,
+    block_qubits: list,
+    J: float,
+    dt: float,
+    n_steps: int,
+    h_scale: float = 1.0,
+    g_scale: float = 1.0,
+    rng=None,
+):
     """
-    Applies n_steps of Heisenberg Trotterized evolution on ALL pairs in block_qubits,
-    plus random on-site Z fields (disorder) on each qubit.
+    Trotterized Ising-TFIM with random longitudinal (Z) and transverse (X) disorder.
 
-    pr          : circuit / program object
-    block_qubits: list of qubit indices
-    J           : base Heisenberg coupling
-    dt          : Trotter time step
-    n_steps     : number of Trotter steps
-    h_scale     : scale of random field strengths (dimensionless)
-    rng         : np.random.Generator or None
+    H = J ∑_{i<j} σ_z^i σ_z^j + ∑_i (h_i σ_z^i + g_i σ_x^i)
     """
     if rng is None:
         rng = np.random.default_rng()
-
     for _ in range(n_steps):
-        # 1) Two-qubit Heisenberg interactions
+        # ZZ couplings
         for i in range(len(block_qubits)):
             for j in range(i + 1, len(block_qubits)):
-                heisenberg_pair(pr, block_qubits[i], block_qubits[j], J * dt)
-
-        # 2) Random on-site Z fields (disorder)
-        #    H_field = sum_i h_i * sigma_z^i  ⇒  exp(-i h_i dt σ_z/2) ≈ RZ(2*h_i*dt)
+                angle = 2.0 * J * dt
+                qc.cx(block_qubits[i], block_qubits[j])
+                qc.rz(angle, block_qubits[j])
+                qc.cx(block_qubits[i], block_qubits[j])
+        # Random longitudinal Z fields
         h = h_scale * rng.uniform(-1.0, 1.0, size=len(block_qubits))
-        for q, h_i in zip(block_qubits, h):
-            pr.apply(RZ(2.0 * h_i * dt), q)
-
-def multi_qubit_ising_block_with_random(pr, block_qubits, J, dt, n_steps, h_scale=1.0, g_scale=1.0, rng=None):
-    """
-    Applies n_steps of Trotterized Ising evolution on ALL pairs in block_qubits,
-    plus random on-site Z fields (disorder) and transverse X fields.
-
-    Ising Hamiltonian: H = J ∑_{i<j} σ_z^i σ_z^j + ∑_i (h_i σ_z^i + g_i σ_x^i)
-
-    pr          : circuit / program object
-    block_qubits: list of qubit indices
-    J           : base Ising ZZ coupling
-    dt          : Trotter time step
-    n_steps     : number of Trotter steps
-    h_scale     : scale of random longitudinal Z field strengths
-    g_scale     : scale of random transverse X field strengths
-    rng         : np.random.Generator or None
-    """
-    if rng is None:
-        rng = np.random.default_rng()
-
-    for _ in range(n_steps):
-        # Two-qubit Ising ZZ interactions implemented via CNOT-RZ-CNOT
-        for i in range(len(block_qubits)):
-            for j in range(i + 1, len(block_qubits)):
-                angle = 2.0 * J * dt  # rotation angle
-                pr.apply(CNOT, block_qubits[i], block_qubits[j])
-                pr.apply(RZ(angle), block_qubits[j])
-                pr.apply(CNOT, block_qubits[i], block_qubits[j])
-
-        # Random on-site longitudinal Z fields: RZ(2 h_i dt)
-        h = h_scale * rng.uniform(-1.0, 1.0, size=len(block_qubits))
-        for q, h_i in zip(block_qubits, h):
-            pr.apply(RZ(2.0 * h_i * dt), q)
-
-        # Random transverse X fields: RX(2 g_i dt)
+        for q_idx, h_i in zip(block_qubits, h):
+            qc.rz(2.0 * h_i * dt, q_idx)
+        # Random transverse X fields
         g = g_scale * rng.uniform(-1.0, 1.0, size=len(block_qubits))
-        for q, g_i in zip(block_qubits, g):
-            pr.apply(RX(2.0 * g_i * dt), q)
-"""
-#defining the reservoir with data interactions
-def reservoir_with_data_interactions(data_vec, num_memory=2, shots=1024, J=1.0, dt=0.1, n_steps=1):
-    from qat.qpus import PyLinalg
+        for q_idx, g_i in zip(block_qubits, g):
+            qc.rx(2.0 * g_i * dt, q_idx)
+
+
+# ---------------------------------------------------------------------------
+# Data-interactions reservoir (one dedicated qubit per timestep)
+# ---------------------------------------------------------------------------
+
+def reservoir_with_data_interactions(
+    data_vec,
+    num_memory: int = 2,
+    shots: int = 1024,
+    J: float = 1.0,
+    dt: float = 0.1,
+    n_steps: int = 1,
+):
+    """
+    Non-reuse reservoir: each timestep t gets its own qubit.
+
+    Layout: qubits 0..T-1 are data qubits; qubits T..T+num_memory-1 are memory.
+    At each step t, x_t is encoded on qubit t, then all active data qubits
+    (0..t) plus memory qubits evolve under a Heisenberg block.
+    Final measurement: all T data qubits into classical bits 0..T-1.
+
+    Use extract_sigmaz_reset(result, T) to get per-timestep ⟨σ_z⟩.
+    """
     T = len(data_vec)
-    total_qb = T + num_memory
-    pr = Program()
-    q = pr.qalloc(total_qb)
-    mem_idxs = [T + i for i in range(num_memory)]
+    total_qubits = T + num_memory
+    qc = QuantumCircuit(total_qubits, T)
+
+    mem_qubits = list(range(T, T + num_memory))
 
     for t, x_t in enumerate(data_vec):
-        # Angle encoding
-        pr.apply(RY((np.pi/2)*(x_t + 1)), q[t])
+        qc.ry((np.pi / 2) * (x_t + 1), t)
+        block_qubits = list(range(t + 1)) + mem_qubits
+        multi_qubit_heisenberg_block(qc, block_qubits, J, dt, n_steps)
 
-        # Form interaction block: all data qubits up to t, plus all memory qubits
-        active_data = [q[i] for i in range(t+1)]
-        mem_qubits = [q[m] for m in mem_idxs]
-        block_qubits = active_data + mem_qubits
+    for t in range(T):
+        qc.measure(t, t)
 
-        # Apply Trotterized Heisenberg to all pairs in block
-        multi_qubit_heisenberg_block(pr, block_qubits, J, dt, n_steps)
+    qc_t = transpile(qc, _backend, optimization_level=0)
+    return _backend.run(qc_t, shots=shots).result()
 
-    # Measurement: all data qubits
-    pr.measure([q[i] for i in range(T)])
-    circuit = pr.to_circ()
-    qpu = get_default_qpu()
-    job = circuit.to_job(nbshots=shots)
-    result = qpu.submit(job)
-    return result
-"""
 
-def reservoir_with_qubit_reuse(data_vec, num_memory=2, shots=1024, J=1.0, dt=1, n_steps=1, disorder_scale=1.0):
+# ---------------------------------------------------------------------------
+# Qubit-reuse reservoir
+# ---------------------------------------------------------------------------
+
+def reservoir_with_qubit_reuse(
+    data_vec,
+    num_memory: int = 2,
+    shots: int = 1024,
+    J: float = 1.0,
+    dt: float = 1.0,
+    n_steps: int = 1,
+    disorder_scale: float = 1.0,
+):
+    """
+    Qubit-reuse reservoir: 1 data qubit + num_memory memory qubits.
+
+    At each timestep t:
+      1. Reset data qubit.
+      2. Angle-encode x_t via RY((π/2)(x_t + 1)).
+      3. Apply Ising-TFIM Trotter block over [data, memory].
+      4. Mid-circuit measure data qubit → classical bit t.
+
+    Returns a Qiskit Result object.
+    """
     T = len(data_vec)
-    pr = Program()
-    q_data = pr.qalloc(1)
-    q_mem = pr.qalloc(num_memory)
-    cbits = pr.calloc(T)  # One classical bit per timestep
+    total_qubits = 1 + num_memory
+    qc = QuantumCircuit(total_qubits, T)
+
+    q_data = 0
+    block_qubits = list(range(total_qubits))  # [0, 1, ..., num_memory]
 
     for t, x_t in enumerate(data_vec):
-        pr.reset([q_data[0]])
-        pr.apply(RY((np.pi/2)*(x_t + 1)), q_data[0])
-        block_qubits = [q_data[0]] + [q_mem[m] for m in range(num_memory)]
-        #multi_qubit_heisenberg_block(pr, block_qubits, J, dt, n_steps)
-        #multi_qubit_heisenberg_block_with_random(pr, block_qubits, J, dt, n_steps, h_scale=disorder_scale)
-        multi_qubit_ising_block_with_random(pr, block_qubits, J, dt, n_steps, h_scale=disorder_scale, g_scale=disorder_scale)
-        pr.measure(q_data[0], cbits[t])  # store this step's result in cbits[t]
+        qc.reset(q_data)
+        qc.ry((np.pi / 2) * (x_t + 1), q_data)
+        multi_qubit_ising_block_with_random(
+            qc, block_qubits, J, dt, n_steps,
+            h_scale=disorder_scale, g_scale=disorder_scale,
+        )
+        qc.measure(q_data, t)
 
-    circuit = pr.to_circ()
-    qpu = get_default_qpu()
-    job = circuit.to_job(nbshots=shots)
-    result = qpu.submit(job)
-    return result
+    qc_t = transpile(qc, _backend, optimization_level=0)
+    return _backend.run(qc_t, shots=shots).result()
 
-def extract_sigmaz_reset(result, n_steps):
+
+# ---------------------------------------------------------------------------
+# Feature extraction from Qiskit results
+# ---------------------------------------------------------------------------
+
+def _sigmaz_from_counts(counts: dict, n_bits: int) -> np.ndarray:
     """
-    Compute <sigma_z> per timestep from myQLM reservoir output.
-    Args:
-        result: myQLM Result object (as provided)
-        n_steps: number of timesteps (number of intermediate_measurements per Sample)
-    Returns:
-        np.ndarray: shape (n_steps,), <sigma_z> for each time step
-    """
-    bit1_prob = np.zeros(n_steps)
-    total_prob = 0.0
+    Compute ⟨σ_z⟩ for each of the first n_bits classical bits from Qiskit counts.
 
-    # Loop over all shots/samples
-    for sample in result.raw_data:
-        prob = sample.probability if hasattr(sample, 'probability') else sample['probability']
-        total_prob += prob
-        # Each sample has a list intermediate_measurements, length n_steps
-        # For each time step t, get measured classical bit value (cbits[0])
+    Qiskit bitstrings are little-endian: rightmost character = classical bit 0.
+    ⟨σ_z⟩_t = 1 - 2·P(bit_t = 1).
+    """
+    total_shots = sum(counts.values())
+    bit1_count = np.zeros(n_bits)
+    for bitstring, count in counts.items():
+        bs = bitstring.replace(' ', '')
+        for t in range(n_bits):
+            idx = len(bs) - 1 - t  # bit t is at position -(t+1) from right
+            if idx >= 0 and bs[idx] == '1':
+                bit1_count[t] += count
+    return 1 - 2 * (bit1_count / total_shots) if total_shots else np.ones(n_bits)
+
+
+def extract_sigmaz_reset(result, n_steps: int) -> np.ndarray:
+    """
+    Compute ⟨σ_z⟩ for each of the n_steps timesteps from a reservoir result.
+    """
+    return _sigmaz_from_counts(result.get_counts(), n_steps)
+
+
+def extract_sigmaz_reset_with_washout(
+    result, n_steps: int, washout_length: int = 10
+) -> np.ndarray:
+    """
+    Compute ⟨σ_z⟩ for n_steps timesteps after skipping the washout period.
+
+    Classical bits 0..washout_length-1 are discarded; bits washout_length..washout_length+n_steps-1
+    are used.
+    """
+    counts = result.get_counts()
+    total_shots = sum(counts.values())
+    bit1_count = np.zeros(n_steps)
+    for bitstring, count in counts.items():
+        bs = bitstring.replace(' ', '')
         for t in range(n_steps):
-            int_meas = sample.intermediate_measurements[t]
-            cbit_val = int_meas.cbits[0] if hasattr(int_meas, 'cbits') else int_meas['cbits'][0]
-            # Accumulate probability for '1' outcome
-            if cbit_val == 1:
-                bit1_prob[t] += prob
-    # Convert to <sigma_z> = 1 - 2*P(1) for each time step
-    sigmaz = 1 - 2 * (bit1_prob / total_prob) if total_prob else np.ones(n_steps)
-    return sigmaz
-
-def extract_sigmaz_reset_with_washout(result, n_steps, washout_length=10):
-    """
-    Compute <sigma_z> per timestep, skipping first washout_length measurements.
-    """
-    bit1_prob = np.zeros(n_steps)
-    total_prob = 0.0
-    
-    for sample in result.raw_data:
-        prob = sample.probability if hasattr(sample, 'probability') else sample['probability']
-        total_prob += prob
-        
-        # Skip first washout_length timesteps, extract next n_steps
-        for t in range(n_steps):
-            meas_idx = washout_length + t  # Start AFTER washout
-            int_meas = sample.intermediate_measurements[meas_idx]
-            cbit_val = int_meas.cbits[0] if hasattr(int_meas, 'cbits') else int_meas['cbits'][0]
-            if cbit_val == 1:
-                bit1_prob[t] += prob
-    
-    sigmaz = 1 - 2 * (bit1_prob / total_prob) if total_prob else np.ones(n_steps)
-    return sigmaz
+            actual_t = washout_length + t
+            idx = len(bs) - 1 - actual_t
+            if idx >= 0 and bs[idx] == '1':
+                bit1_count[t] += count
+    return 1 - 2 * (bit1_count / total_shots) if total_shots else np.ones(n_steps)
 
 
-#lagged features for training over all time steps
-def make_lagged_features(features, targets, window):
-    """ Return X, y using past `window` features to predict next target. """
+# ---------------------------------------------------------------------------
+# Lagged feature construction (pure numpy, unchanged)
+# ---------------------------------------------------------------------------
+
+def make_lagged_features(features, targets, window: int):
+    """Return X, y using past `window` features to predict next target."""
     X, y = [], []
     for i in range(window, len(features)):
-        # X is a vector of window values: [x_{i-window}, ..., x_{i-1}]
-        X.append(features[i-window:i])
-        y.append(targets[i])  # true value at time step i
+        X.append(features[i - window:i])
+        y.append(targets[i])
     return np.array(X), np.array(y)

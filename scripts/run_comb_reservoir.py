@@ -3,6 +3,7 @@ Quantum Reservoir Computing Pipeline for Option Pricing Deviations
 Unified per-window implementation with configurable washout handling.
 Supports XXZ, NNN (chaotic/localized), IAA (chaotic/localized) models.
 """
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import multiprocessing
 import json
@@ -12,10 +13,10 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
 # Core modules
-from data_gen import generate_data
-from reservoir_gen import reservoir_results_per_window, DEFAULT_DET_INTERVENTIONS
-from feature_engineering import create_lagged_binary_features, extract_features_from_results
-from config import CONFIG
+from qrc.data_gen import generate_data
+from qrc.reservoir_gen import reservoir_results_per_window, DEFAULT_DET_INTERVENTIONS
+from qrc.feature_engineering import create_lagged_binary_features, extract_features_from_results
+from qrc.config import CONFIG
 
 print("=== QUANTUM RESERVOIR COMPUTING PIPELINE ===")
 print(f"Washout length: {CONFIG['washout_length']}")

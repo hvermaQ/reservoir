@@ -1,0 +1,3 @@
+config,family,task_key,control,model,num_memory,shots,total_time,W,encoding,best_arm_value,floor_value,learnable
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,0.6255210923044231,1.044753861361903,True
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,0.22847244693011848,0.3821277501461171,True

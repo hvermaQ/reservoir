@@ -1,0 +1,27 @@
+{
+  "name": "entropy_matched",
+  "description": "Entropy-matched model comparison. total_time is resolved per model so every model sits at the same task-conditional entanglement, which separates 'entanglement is irrelevant' from 'this particular interaction time suited both models'.",
+  "margins": {"acc": 0.01},
+  "primary": {
+    "family": "classification", "metric": "acc", "task_key": "digits:all",
+    "arm_a": "quantum", "arm_b": "random_unitary", "margin": 0.01,
+    "params": {"model": "IAA_LOCALIZED", "entropy_target": 0.45}
+  },
+  "experiments": [
+    {
+      "family": "classification",
+      "tasks": [
+        {"dataset": "digits"},
+        {"dataset": "source", "W": 16, "n_per_class": 2500, "noise": 0.0}
+      ],
+      "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "grid": {
+        "n_pca": [16], "num_memory": [4],
+        "model": ["XXZ", "IAA_CHAOTIC", "IAA_LOCALIZED", "NNN_CHAOTIC", "NNN_LOCALIZED"],
+        "n_reupload": [1],
+        "entropy_target": [0.15, 0.25, 0.35, 0.45, 0.55],
+        "shots": [0]
+      }
+    }
+  ]
+}

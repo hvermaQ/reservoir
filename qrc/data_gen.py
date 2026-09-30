@@ -3,11 +3,25 @@ import numpy as np
 from scipy.stats import norm
 import glob
 import os
-data_folder = './2013-01'  # Path to optiondata.org files
+from pathlib import Path
 
-def generate_data(ticker, minmax_criteria=(0.8, 1.2)):
+repo_root = Path(__file__).resolve().parents[1]
+data_folder = repo_root / 'data' / '2013-06'  # Default: optiondata.org-formatted daily CSVs
+
+def generate_data(ticker, minmax_criteria=(0.8, 1.2), folder=None):
+    src = Path(folder) if folder is not None else data_folder
+    if not src.exists():
+        raise FileNotFoundError(
+            f"Data folder does not exist: {src}. "
+            "Set the `folder` argument to a valid path."
+        )
     # --- 1. LOAD ALL OPTIONS FILES ---
-    option_files = sorted(glob.glob(os.path.join(data_folder, '*options.csv')))
+    option_files = sorted(glob.glob(str(src / '*options.csv')))
+    if not option_files:
+        raise ValueError(
+            f"No option files found in {src}. "
+            f"Files available: {sorted(os.listdir(src))[:20]}"
+        )
     option_dfs = []
     for f in option_files:
         daily_df = pd.read_csv(f)
@@ -17,7 +31,7 @@ def generate_data(ticker, minmax_criteria=(0.8, 1.2)):
     opts['date'] = pd.to_datetime(opts['quote_date'])  # Use quote_date if available
 
     # --- 2. LOAD ALL STOCK FILES ---
-    stock_files = sorted(glob.glob(os.path.join(data_folder, '*stocks.csv')))
+    stock_files = sorted(glob.glob(os.path.join(src, '*stocks.csv')))
     stock_dfs = []
     for f in stock_files:
         sdf = pd.read_csv(f)

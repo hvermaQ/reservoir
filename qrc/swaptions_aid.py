@@ -4,15 +4,29 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
 
-from reserve_mem import (
+from qrc.reserve_mem import (
     reservoir_with_qubit_reuse,
     extract_sigmaz_reset_with_washout,
 )
 
 # ---------------------------------------------------------------------
-# Load Excel file once (as in your original version)
+# Data loading
+#
+# This used to be a module-level pd.read_excel with a RELATIVE path, so merely
+# importing the module failed unless the process cwd was the repo root, and it
+# paid the Excel parse on every import. It is now an explicit, path-independent
+# function call.
 # ---------------------------------------------------------------------
-df = pd.read_excel("opt_data/sample_Simulated_Swaption_Price.xlsx", sheet_name=0)
+from pathlib import Path
+
+DEFAULT_SWAPTION_XLSX = (
+    Path(__file__).resolve().parents[1] / "data" / "sample_Simulated_Swaption_Price.xlsx"
+)
+
+
+def load_swaptions(path=None, sheet_name=0) -> pd.DataFrame:
+    """Load the swaption price matrix. Call this instead of relying on import."""
+    return pd.read_excel(Path(path) if path else DEFAULT_SWAPTION_XLSX, sheet_name=sheet_name)
 
 
 # ---------------------------------------------------------------------

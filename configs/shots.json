@@ -1,0 +1,73 @@
+{
+  "name": "shots",
+  "description": "Finite-shot degradation curve. The exact-expectation numbers are an unreachable ceiling, so any hardware-relevant claim needs this axis; a narrow grid over a wide shot range keeps the cost down.",
+  "margins": {
+    "acc": 0.01
+  },
+  "primary": {
+    "family": "classification",
+    "metric": "acc",
+    "task_key": "source:W16n2500",
+    "arm_a": "quantum",
+    "arm_b": "random_unitary",
+    "margin": 0.01,
+    "params": {
+      "model": "XXZ",
+      "num_memory": 4,
+      "n_reupload": 1,
+      "shots": 512
+    }
+  },
+  "experiments": [
+    {
+      "family": "classification",
+      "tasks": [
+        {
+          "dataset": "source",
+          "W": 16,
+          "n_per_class": 2500,
+          "noise": 0.0
+        },
+        {
+          "dataset": "mnist",
+          "n_samples": 20000
+        }
+      ],
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid": {
+        "n_pca": [
+          16
+        ],
+        "num_memory": [
+          4,
+          6
+        ],
+        "model": [
+          "XXZ",
+          "IAA_CHAOTIC",
+          "IAA_LOCALIZED"
+        ],
+        "n_reupload": [
+          1,
+          2
+        ],
+        "total_time": [
+          0.2
+        ],
+        "shots": [
+          0,
+          128,
+          512,
+          2048,
+          8192
+        ]
+      }
+    }
+  ]
+}

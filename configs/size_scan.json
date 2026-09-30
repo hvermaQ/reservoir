@@ -1,0 +1,69 @@
+{
+  "name": "size_scan",
+  "description": "Does more Hilbert space help? Sweeps system size on NARMA-10 and on the highest-volatility stock cohort, with seeds, so the flat scaling can be stated with an error bar instead of from one run.",
+  "margins": {
+    "NRMSE": 0.02
+  },
+  "primary": {
+    "family": "timeseries",
+    "metric": "NRMSE",
+    "task_key": "narma10",
+    "arm_a": "quantum",
+    "arm_b": "raw_only",
+    "margin": 0.02,
+    "params": {
+      "model": "XXZ",
+      "num_memory": 8,
+      "total_time": 0.2
+    }
+  },
+  "experiments": [
+    {
+      "family": "timeseries",
+      "tasks": [
+        {
+          "dataset": "narma10",
+          "n": 3000
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "vol",
+          "index": 2,
+          "n_cohorts": 3,
+          "max_series": 600
+        }
+      ],
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid": {
+        "W": [
+          10
+        ],
+        "num_memory": [
+          2,
+          4,
+          6,
+          8
+        ],
+        "model": [
+          "XXZ"
+        ],
+        "total_time": [
+          0.2,
+          8.75
+        ],
+        "encoding": [
+          "continuous"
+        ],
+        "shots": [
+          0
+        ]
+      }
+    }
+  ]
+}

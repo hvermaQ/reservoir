@@ -1,11 +1,12 @@
 # run.py
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import multiprocessing
 #import numpy as np
 #import pandas as pd
 
-from swaptions_aid import *
+from qrc.swaptions_aid import *
 
-OUTPUT_PATH = "opt_data/sample_Simulated_Swaption_Price_imputed.xlsx"
+OUTPUT_PATH = "data/sample_Simulated_Swaption_Price_imputed.xlsx"
 
 
 def impute_column(col_index: int):

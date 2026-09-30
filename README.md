@@ -1,146 +1,267 @@
-# Quantum Reservoir Computing for Options Pricing & Swaption Time-Series Imputation
+# Quantum Reservoir Computing — benchmark harness
 
-This repository contains an end-to-end workflow that uses **quantum reservoir computing (QRC)** to analyse financial time-series, learn deviation signals in option prices, and impute missing values in swaption datasets.  
-The approach integrates:
+A quantum reservoir / quantum extreme-learning-machine implementation with the
+controls needed to tell whether it actually does anything, and a sweep harness
+for running that question over many seeds, tasks and configurations in parallel.
 
-- **Deviation-based preprocessing** using Black–Scholes baselines  
-- **Heisenberg/Ising-based quantum reservoirs** implemented in **myQLM**  
-- **Qubit-reuse reservoir architecture** with disorder fields  
-- **Classical readout layers** (MLPs) trained on extracted ⟨σᶻ⟩ features  
-- **Imputation pipeline** for swaption price matrices  
-
-A high-level schematic and conceptual background are provided in the slide deck in the formats pptx and pdf.
-
-An explainer video can be found here: **** https://drive.google.com/file/d/1xKPQA3WnbGwFYCDZAwpzMwLt-FA6GGpk/view?usp=drive_link ****
-
-Send email at ***hvarma2@gmail.com*** for a detailed explanation on usage and features.
+The headline finding so far is negative and the repository is built to state it
+defensibly rather than to hide it: across every properly controlled comparison
+run to date, the quantum feature map does not beat a tuned, width-matched
+classical baseline, and usually does not beat a Haar-random unitary of the same
+dimension. See `docs/` and `results/aggregated/`.
 
 ---
 
-## 📂 Repository Structure
+## Layout
 
-### **1. Data Generation & Option-Deviations Pipeline**
-
-- **`gen_dat.py`** – Loads option-market files, merges them with underlying asset data, computes mid-prices, and constructs **Black–Scholes deviations**.
-
-- **Sample input file** (small example):  
-  Located in **`opt_data/`**, alongside the **imputed swaption file** produced by the imputation pipeline.
-
-- **Full historical option-chain dataset**  
-  The full dataset used for experiments is **not included in this repo** due to size but is **available upon request**.
-
----
-
-### **2. Quantum Reservoir Implementation**
-
-- **`reserve_mem.py`** – Core implementation of the quantum reservoir:
-  - Trotterized Heisenberg & Ising blocks  
-  - Random disorder fields  
-  - Qubit reuse architecture  
-  - Extraction of ⟨σᶻ⟩ expectation values  
-  - Lag-feature construction for time-series learning  
-
----
-
-### **3. End-to-End Learning Script**
-
-- **`reserve_end-to-end.py`** – Full learning workflow:
-  - Load options data via `generate_data()`  
-  - Construct deviation time series  
-  - Sweep over memory sizes  
-  - Train a neural readout layer  
-  - Produce MAE / RMSE / R² metrics  
-  - Plot training loss curves  
-
----
-
-### **4. Parallel Experiments & Metric Logging**
-
-- **`reserve_multip.py`** – Multiprocessing wrapper for running memory-sweep experiments in parallel.  
-  Saves:
-  - `loss_curves_*.npy`  
-  - `error_metrics_*.json`
-
-- **`reserve_plot.py`** – Plotting utilities for aggregating results across all runs.
-
----
-
-### **5. Swaption Time-Series Imputation Pipeline**
-
-- **`swaptions_aid.py`** – Step-wise imputation routine:
-  - Selects clean windows  
-  - Extracts QRC features  
-  - Trains a lightweight MLP readout  
-  - Performs forward-filling via quantum reservoir predictions  
-
-- **`swaptions_run.py`** – End-to-end imputation execution:
-  - Parallel imputation of multiple columns  
-  - Writes output to  
-    **`opt_data/sample_Simulated_Swaption_Price_imputed.xlsx`**
-
-**Both the sample input file and the imputed file are provided in the `opt_data/` directory.**
-
----
-
-## 🔍 Tasks Supported
-
-### **1. Options Price Deviation Learning**
-- Learn deviation dynamics for a chosen strike/expiry.  
-- Compare performance across reservoir memory sizes.  
-- Study effect of disorder and Trotterisation depth.
-
-### **2. Swaption Matrix Imputation**
-- Handle missing values with minimal data.  
-- Produce fully imputed Excel outputs.  
-- Demonstrate the utility of quantum reservoirs for structural financial datasets.
-
----
-
-## 📦 Requirements
-
-- **myQLM**  
-- **scikit-learn**  
-- **numpy / pandas**  
-- **matplotlib**  
-- **multiprocessing**
-
----
-
-## ▶️ How to Run
-
-### **Option-Deviation Learning**
 ```
-python reserve_end-to-end.py
-```
+qrc/            library
+  ppe.py            reservoir: unitary interventions, Renyi-2 + <sigma_z> readout
+  ham_gen.py        XXZ / NNN / IAA Hamiltonian blocks
+  classify.py       static feature-map path + classical baselines
+  evaluate.py       windowing, splits, ridge readout, time-series baselines
+  datasets.py       synthetic benchmarks, equities, options, stock cohorts
+  streaming.py      RC proper: continuous drive, no reset, memory capacity
+  metrics.py        effective rank, task-conditional entanglement
+  calibrate.py      interaction time that hits a target entropy
+  spec.py           config -> deterministic, content-addressed work units
+  tasks.py          task spec -> split data (disk + in-process cached)
+  runner.py         one unit -> one record (all arms, one split)
+  store.py          atomic per-unit result files, resume detection
+  aggregate.py      shards -> tidy table -> paired stats with error bars
+  cache.py          on-disk memoisation of dataset preparation
 
-### **Parallel Memory Sweep**
-```
-python reserve_multip.py
-```
-
-### **Swaptions Imputation**
-```
-python swaptions_run.py
-```
-
-Output will be written to:
-```
-opt_data/sample_Simulated_Swaption_Price_imputed.xlsx
+configs/        experiment definitions (JSON)
+scripts/qrc.py  sweep driver: prepare | plan | run | status | aggregate
+                              | diagnostics | calibrate | power
+results/runs/   one JSON per finished unit (gitignored; regenerate by rerunning)
+results/aggregated/  tidy.csv, summary_*.csv, paired_*.csv, headline.json
+tests/          gate-level physics tests + harness tests
 ```
 
 ---
 
-## 📬 Data Availability
+## Running a sweep
 
-- **Sample files** (options & swaptions) are included in `opt_data/`.  
-- **Imputed swaption file** is generated automatically in the same folder.  
-- **Full-scale options dataset** is **available upon request**.
+```bash
+# 1. build every dataset cache ONCE, serially
+python3 scripts/qrc.py prepare -c configs/timeseries_seeds.json
+
+# 2. see what would run, without running it
+python3 scripts/qrc.py plan    -c configs/timeseries_seeds.json
+python3 scripts/qrc.py run     -c configs/timeseries_seeds.json --dry-run
+
+# 3. run it
+python3 scripts/qrc.py run     -c configs/timeseries_seeds.json --jobs 12
+
+# 4. pilot, then size the seed count from the MEASURED paired variance
+python3 scripts/qrc.py run   -c configs/timeseries_seeds.json --limit 40
+python3 scripts/qrc.py power -c configs/timeseries_seeds.json
+
+# 5. progress / failures, then aggregate
+python3 scripts/qrc.py status    -c configs/timeseries_seeds.json
+python3 scripts/qrc.py aggregate -c configs/timeseries_seeds.json
+```
+
+`prepare` also warms the entropy calibrations. `power` reports the paired
+standard deviation actually observed and the number of seeds needed to detect
+the configured margin at 80% power -- run it after a pilot and before committing
+to a seed count, because a sweep that cannot resolve its own effect size costs
+the same as one that can.
+
+Or end to end: `./scripts/run_local.sh configs/smoke.json 8`.
+
+Start with `configs/smoke.json` (4 units). It exercises every code path and
+costs seconds, so a broken config fails in seconds rather than at hour six.
+
+### Many machines
+
+Units are content-addressed and independent, so any subset can run anywhere:
+
+```bash
+python3 scripts/qrc.py prepare -c configs/timeseries_seeds.json   # once, first
+sbatch --array=0-15 scripts/slurm_array.sh configs/timeseries_seeds.json
+```
+
+Each array task takes `--shard i/N` of the unit list. Shards are balanced and
+contiguous, so no two tasks write the same file and no coordination is needed.
 
 ---
 
-## 📘 Citation
+## Three families
 
-If you use this repository, please cite the accompanying slide deck:
-*Effect of Reservoir Memory on Learning Options Price*  
-Harshit Verma
+| family | protocol | what it can support a claim about |
+|---|---|---|
+| `classification` | static feature map on PCA components | a quantum **feature map** / QELM |
+| `timeseries` | windowed, state reset every window | a quantum **feature map** on windows |
+| `streaming` | continuous drive, **no reset**, + memory capacity | **reservoir computing** |
 
+This distinction is load-bearing. `reservoir_features` re-initialises the state
+for every window, so the first two families contain no recurrence and no fading
+memory — whatever they show, they cannot support a claim about *reservoirs*.
+Only `streaming` can. It also reports Jaeger linear memory capacity, which is
+the number that decides whether a null result is a fact about these tasks or a
+structural fact about unitary dynamics.
+
+---
+
+## Why the harness is shaped this way
+
+**One unit = one (task, configuration, seed), evaluated for every arm.** The
+quantum arm, the Haar-random control and the classical baselines are computed
+together from one prepared split. This is not an optimisation: every claim here
+is a *paired* comparison, pairing is only valid if the arms saw the same split,
+and keeping them in one unit makes it impossible to schedule them apart.
+
+**One file per unit, named by a hash of its content.** A single aggregate JSON
+written at the end of a monolithic script cannot resume, cannot be written by
+more than one process, and loses everything if the job dies at 90%. Per-unit
+files make the sweep resumable, idempotent and shardable, and a failed unit
+records its traceback instead of taking down the run.
+
+**Seeds reach the data, not just the split.** `seed` selects the sample draw,
+the chaotic initial condition, the disorder realisation, the Haar draw, the
+shot-noise stream and the train/test split, each derived independently by hash.
+A sweep whose seeds only reshuffle one split reports error bars far narrower
+than the real variability.
+
+**Baselines are tuned and width-matched, every time.** `rff_<n>` is always
+matched to the quantum feature count with gamma selected on held-out training
+data. An untuned baseline is the specific failure that manufactures apparent
+quantum advantage — in this repo it once flipped all 12 MNIST configurations
+from "quantum wins" to "quantum loses" with the quantum numbers unchanged.
+
+**Differences are formed within a seed, then averaged.** `aggregate.paired`
+computes quantum − control inside each seed before averaging, and reports a
+percentile bootstrap CI over seeds. Differencing separately-averaged arms throws
+away the pairing and inflates the error bar, which for gaps of ~0.01 accuracy is
+the difference between a claim and a coincidence.
+
+**The Haar control is injected, never monkeypatched.** `reservoir_features(...,
+block_unitary=U)` passes the control explicitly. The previous approach reassigned
+the module-global `ppe.build_block_unitary`, which is invisible to the reader and
+corrupts any concurrent caller sharing the interpreter — precisely what a
+parallel sweep arranges.
+
+**BLAS is pinned to one thread per worker.** Each unit is already a small dense
+linear-algebra job. Unpinned, N workers spawn N×cores threads and the sweep runs
+slower than serial. `scripts/qrc.py` sets this before numpy is imported.
+
+**One comparison is declared before the data exists.** Each config carries a
+`primary` block naming the family, task, arms and equivalence margin. Everything
+else in the sweep is exploratory and BH-corrected; only the primary is
+confirmatory. With hundreds of cells some will look significant by chance, and a
+reader has no way to know which were chosen afterwards.
+
+**The claim is bounded, not merely un-rejected.** "The CI includes zero" is a
+failure to reject, which is not evidence of absence. Every comparison carries a
+margin — the smallest difference that would matter — and reports one of
+`superior` / `equivalent` / `inferior` / `inconclusive`. `equivalent` means a
+difference worth caring about has been *ruled out*; `inconclusive` means the
+study cannot tell, which is where an underpowered design lands.
+
+**Representation capacity is measured, not assumed.** The quantum feature vector
+concatenates functionally dependent quantities, so its nominal width overstates
+its usable dimension — at L=5 the participation ratio is about 4 directions out
+of 54 nominal features. Matching a random-feature baseline on nominal width
+therefore hands the classical arm more effective capacity. Effective rank is
+recorded for every arm so this is visible rather than arguable.
+
+**Entanglement is measured on the inputs that were actually used.**
+`ppe_diagnostics` enumerates the symbolic Pauli alphabet, which is a different
+input distribution from the continuous encoding the experiments run on, so it
+cannot be the x-axis of a claim about those experiments. The entropy columns of
+the real feature matrix can, and they are free.
+
+**Models can be compared at matched entanglement, not just matched time.**
+Setting `entropy_target` instead of `total_time` resolves the interaction time
+per model so every model sits at the same task-conditional entropy. Comparing a
+chaotic and a localised model at a common `total_time` confounds "entanglement
+does not matter" with "this particular time suited both". Calibration reports
+the achieved fraction and whether the target was reachable at all — always read
+`achieved_frac` rather than assuming the request was met.
+
+**Negative controls are part of the sweep.** `control: shuffle_labels` must
+drive every arm to chance; `control: shuffle_features` must collapse only the
+quantum arms while the classical baselines are untouched. Control units are
+excluded from every summary automatically and reported separately.
+
+**Every record names the code that produced it.** Git SHA, dirty flag, Python
+and library versions. This repo has already had one generation of results
+invalidated by three silent Hamiltonian bugs.
+
+---
+
+## Configs
+
+| config | units | what it answers |
+|---|---|---|
+| `smoke.json` | 14 | harness validation, all three families + both controls |
+| `negative_controls.json` | 54 | **run this first** — leakage check; nothing else is trustworthy until it passes |
+| `classification_seeds.json` | 2700 | breadth grid + entropy dose-response via a `total_time` sweep within each model |
+| `entropy_matched.json` | 500 | models compared at equal task-conditional entanglement |
+| `streaming.json` | 960 | reservoir computing proper + memory capacity |
+| `timeseries_seeds.json` | 2200 | 3 synthetic + options + 7 stock cohorts |
+| `shots.json` | 600 | finite-shot degradation, the hardware-relevant ceiling |
+| `stocks_bootstrap.json` | 120 | ticker-resampling uncertainty on the equity universe |
+| `size_scan.json` | 80 | does more Hilbert space help (with error bars) |
+
+Grid and task keys are validated on load, so a mistyped key fails immediately
+instead of silently doing nothing to a 2000-unit sweep.
+
+### A limit worth knowing
+
+`data/2013-06` is a **single month**: each ticker yields at most ~19 daily
+returns. "Multiple stocks" therefore cannot mean one task per ticker at `W=10` —
+there would be ~9 windows each. It means multiple *cohorts*:
+
+* `vol` — tickers bucketed by realised volatility (does the reservoir help more
+  on noisier series?)
+* `disjoint` — hash-partitioned, share no ticker, so cohorts are independent
+  replicates
+* `bootstrap` — resampled with replacement per seed, so seed spread measures
+  ticker-sampling uncertainty
+
+---
+
+## Tests
+
+```bash
+python3 -m pytest tests/ -q
+```
+
+88 tests. `test_gates.py` checks every two-qubit block against
+`scipy.linalg.expm` (three silent Hamiltonian bugs motivated these) and pins the
+`block_unitary` injection. `test_harness.py` covers the failure modes that are
+silent at scale: duplicate unit ids, unbalanced shards, NaN grouping keys
+emptying a comparison table, `wins` and `effect` respecting metric direction,
+control units leaking into summaries, effective rank recovering a known
+dimension, the streaming state genuinely not resetting, and calibration
+reporting unreachable targets instead of pretending.
+
+### Known measurement caveats
+
+* The achievable entropy range is model dependent and does not span [0, 1] — the
+  pooled-over-cuts fraction saturates near 0.58 because outer cuts have a lower
+  maximum than the half-chain cut. High targets are reported as unreachable
+  rather than silently approximated.
+* Single-series tasks measure interpolation within one trajectory, not
+  out-of-distribution generalisation.
+* At finite `shots` the quantum arm and its Haar control are both noisy while the
+  classical baselines are exact. That is "hardware reality vs classical ceiling",
+  not a like-for-like comparison, and should be framed as such.
+
+---
+
+## Legacy
+
+`scripts/run_ppe_reservoir.py`, `run_classifier.py` and `run_source_clf.py` are
+the original single-shot, single-seed runners that produced `results/ppe/` and
+`results/classifier/`. They still work and are kept for provenance; new work
+should go through `scripts/qrc.py`.
+
+`results/heisen_disorder/` and `results/ising_tfim_disorder/` are **invalid** —
+every entry has `R2: NaN` with `MAE == RMSE`, i.e. single-sample evaluation, and
+they predate the gate-bug fixes. Do not cite them.
+
+`archive/` holds superseded myQLM-era scripts.

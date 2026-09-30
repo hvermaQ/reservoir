@@ -1,0 +1,130 @@
+{
+  "name": "timeseries_seeds",
+  "description": "Multi-seed, multi-task time-series sweep: three synthetic benchmarks, the option-deviation panel, and seven stock cohorts treated as independent tasks.",
+  "margins": {
+    "NRMSE": 0.02
+  },
+  "primary": {
+    "family": "timeseries",
+    "metric": "NRMSE",
+    "task_key": "narma10",
+    "arm_a": "quantum",
+    "arm_b": "linear_raw",
+    "margin": 0.02,
+    "params": {
+      "model": "XXZ",
+      "total_time": 0.2
+    }
+  },
+  "experiments": [
+    {
+      "family": "timeseries",
+      "tasks": [
+        {
+          "dataset": "narma10",
+          "n": 3000
+        },
+        {
+          "dataset": "mackey_glass",
+          "n": 3000
+        },
+        {
+          "dataset": "lorenz",
+          "n": 3000
+        },
+        {
+          "dataset": "options",
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "vol",
+          "index": 0,
+          "n_cohorts": 3,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "vol",
+          "index": 1,
+          "n_cohorts": 3,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "vol",
+          "index": 2,
+          "n_cohorts": 3,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "disjoint",
+          "index": 0,
+          "n_cohorts": 4,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "disjoint",
+          "index": 1,
+          "n_cohorts": 4,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "disjoint",
+          "index": 2,
+          "n_cohorts": 4,
+          "max_series": 600
+        },
+        {
+          "dataset": "stock_cohort",
+          "scheme": "disjoint",
+          "index": 3,
+          "n_cohorts": 4,
+          "max_series": 600
+        }
+      ],
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "grid": {
+        "W": [
+          10
+        ],
+        "num_memory": [
+          4
+        ],
+        "model": [
+          "XXZ",
+          "NNN_CHAOTIC",
+          "NNN_LOCALIZED",
+          "IAA_CHAOTIC",
+          "IAA_LOCALIZED"
+        ],
+        "total_time": [
+          0.2,
+          0.5,
+          1.75,
+          8.75
+        ],
+        "encoding": [
+          "continuous"
+        ],
+        "shots": [
+          0
+        ]
+      }
+    }
+  ]
+}

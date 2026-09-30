@@ -1,0 +1,20 @@
+{
+  "name": "negative_controls",
+  "description": "Pipeline sanity. shuffle_labels must drive EVERY arm to chance; shuffle_features must collapse only the quantum arms while the classical baselines are untouched. Anything else means leakage, and no other result in the repo can be trusted until this passes.",
+  "margins": {"acc": 0.01, "NRMSE": 0.02},
+  "experiments": [
+    {"family": "classification",
+     "tasks": [{"dataset": "digits"}, {"dataset": "source", "W": 16, "n_per_class": 1000}],
+     "seeds": [0, 1, 2],
+     "grid": {"n_pca": [16], "num_memory": [4], "model": ["XXZ", "IAA_LOCALIZED"],
+              "n_reupload": [1], "total_time": [0.2], "shots": [0],
+              "control": ["none", "shuffle_labels", "shuffle_features"]}},
+    {"family": "timeseries",
+     "tasks": [{"dataset": "narma10", "n": 3000},
+               {"dataset": "stock_cohort", "scheme": "vol", "index": 2, "n_cohorts": 3, "max_series": 300}],
+     "seeds": [0, 1, 2],
+     "grid": {"W": [10], "num_memory": [4], "model": ["XXZ"], "total_time": [0.2],
+              "encoding": ["continuous"], "shots": [0],
+              "control": ["none", "shuffle_labels", "shuffle_features"]}}
+  ]
+}

@@ -1,0 +1,5 @@
+config,family,task_key,control,model,n_pca,n_reupload,num_memory,shots,total_time,best_arm_value,floor_value,learnable
+negative_controls,classification,digits:all,none,IAA_LOCALIZED,16.0,1.0,4,0,0.2,0.9685185185185186,0.10185185185185185,True
+negative_controls,classification,digits:all,none,XXZ,16.0,1.0,4,0,0.2,0.9685185185185186,0.10185185185185185,True
+negative_controls,classification,source:W16n1000,none,IAA_LOCALIZED,16.0,1.0,4,0,0.2,0.8925,0.25,True
+negative_controls,classification,source:W16n1000,none,XXZ,16.0,1.0,4,0,0.2,0.8925,0.25,True

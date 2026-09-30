@@ -1,0 +1,77 @@
+{
+  "name": "stocks_bootstrap",
+  "description": "Ticker-resampling uncertainty. Each seed draws a different bootstrap sample of tickers, so the spread measures sampling variability of the stock universe rather than split noise alone.",
+  "margins": {
+    "NRMSE": 0.02
+  },
+  "primary": {
+    "family": "timeseries",
+    "metric": "NRMSE",
+    "task_key": "stock:bootstrap0",
+    "arm_a": "quantum",
+    "arm_b": "linear_raw",
+    "margin": 0.02,
+    "params": {
+      "model": "XXZ",
+      "total_time": 0.2
+    }
+  },
+  "experiments": [
+    {
+      "family": "timeseries",
+      "tasks": [
+        {
+          "dataset": "stock_cohort",
+          "scheme": "bootstrap",
+          "index": 0,
+          "max_series": 600
+        }
+      ],
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "grid": {
+        "W": [
+          10
+        ],
+        "num_memory": [
+          4
+        ],
+        "model": [
+          "XXZ",
+          "IAA_CHAOTIC",
+          "IAA_LOCALIZED"
+        ],
+        "total_time": [
+          0.2,
+          8.75
+        ],
+        "encoding": [
+          "continuous"
+        ],
+        "shots": [
+          0
+        ]
+      }
+    }
+  ]
+}

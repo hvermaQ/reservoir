@@ -1,0 +1,115 @@
+{
+  "classification": {
+    "metric": "acc",
+    "margin": 0.01,
+    "n_seeds": 3,
+    "n_units": 12,
+    "vs_random_unitary": {
+      "n_configs": 4,
+      "wins": 0,
+      "significant_wins": 0,
+      "significant_wins_bh": 0,
+      "verdicts": {
+        "inconclusive": 2,
+        "inferior": 2
+      }
+    },
+    "vs_rff": {
+      "n_configs": 4,
+      "wins": 0,
+      "significant_wins": 0,
+      "significant_wins_bh": 0,
+      "verdicts": {
+        "inferior": 4
+      }
+    },
+    "vs_rbf_svm": {
+      "n_configs": 4,
+      "wins": 0,
+      "significant_wins": 0,
+      "significant_wins_bh": 0,
+      "verdicts": {
+        "inferior": 4
+      }
+    }
+  },
+  "timeseries": {
+    "metric": "NRMSE",
+    "margin": 0.02,
+    "n_seeds": 3,
+    "n_units": 6,
+    "vs_random_unitary": {
+      "n_configs": 2,
+      "wins": 1,
+      "significant_wins": 0,
+      "significant_wins_bh": 0,
+      "verdicts": {
+        "inferior": 1,
+        "inconclusive": 1
+      }
+    },
+    "vs_linear_raw": {
+      "n_configs": 2,
+      "wins": 0,
+      "significant_wins": 0,
+      "significant_wins_bh": 0,
+      "verdicts": {
+        "inferior": 1,
+        "inconclusive": 1
+      }
+    },
+    "vs_raw_only": {
+      "n_configs": 2,
+      "wins": 1,
+      "significant_wins": 1,
+      "significant_wins_bh": 1,
+      "verdicts": {
+        "inferior": 1,
+        "inconclusive": 1
+      }
+    },
+    "learnable_configs": "2/2"
+  },
+  "_negative_controls": {
+    "classification": {
+      "shuffle_features": {
+        "logistic": 0.6186,
+        "majority": 0.1759,
+        "quantum": 0.1694,
+        "random_unitary": 0.1737,
+        "rbf_svm": 0.9158,
+        "rff": 0.9057
+      },
+      "shuffle_labels": {
+        "logistic": 0.179,
+        "majority": 0.1759,
+        "quantum": 0.179,
+        "random_unitary": 0.1757,
+        "rbf_svm": 0.1721,
+        "rff": 0.1777
+      }
+    },
+    "timeseries": {
+      "shuffle_features": {
+        "linear_raw": 0.5319,
+        "linear_symbolic": 0.6626,
+        "mean": 0.7134,
+        "persistence": 0.7079,
+        "quantum": 0.733,
+        "random_unitary": 0.7274,
+        "raw_only": 0.5544,
+        "raw_plus_reservoir": 0.5749
+      },
+      "shuffle_labels": {
+        "linear_raw": 0.7135,
+        "linear_symbolic": 0.7206,
+        "mean": 0.7134,
+        "persistence": 0.9777,
+        "quantum": 0.7221,
+        "random_unitary": 0.7241,
+        "raw_only": 0.7147,
+        "raw_plus_reservoir": 0.724
+      }
+    }
+  }
+}

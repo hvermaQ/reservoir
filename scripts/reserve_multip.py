@@ -1,8 +1,9 @@
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import multiprocessing
 from sklearn.neural_network import MLPRegressor
 import matplotlib.pyplot as plt
-from data_gen import generate_data
-from reserve_mem import reservoir_with_qubit_reuse, extract_sigmaz_reset_with_washout, make_lagged_features
+from qrc.data_gen import generate_data
+from qrc.reserve_mem import reservoir_with_qubit_reuse, extract_sigmaz_reset_with_washout, make_lagged_features
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, root_mean_squared_error
 
 import json

@@ -1,19 +1,42 @@
+"""
+reservoir_gen.py — Qiskit process-comb reservoir for XXZ / NNN / IAA models.
+
+Responsibilities:
+  - Take a PRE-BINARIZED intervention sequence x_seq (ints 0-3).
+  - Apply deterministic local interventions A_{x_t} on the system qubit.
+  - Between interventions, evolve {system + memory} under a Hamiltonian
+    block chosen by model_key via ham_gen.MODEL_BLOCKS.
+  - Supports standard (strong CNOT-measured) and ancilla weak-measurement variants.
+"""
+
 import numpy as np
-from qat.lang.AQASM import Program, RZ, RX, RY, X, CNOT, I
-from ham_gen import MODEL_BLOCKS
-from qat.qpus import get_default_qpu
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
 
-def det_I(pr, q):
-    pr.apply(I, q)
+from qrc.ham_gen import MODEL_BLOCKS
 
-def det_Z(pr, q):
-    pr.apply(RZ(np.pi), q)
+_backend = AerSimulator(method='statevector')
 
-def det_X(pr, q):
-    pr.apply(RX(np.pi), q)
 
-def det_Y(pr, q):
-    pr.apply(RY(np.pi), q)
+# ---------------------------------------------------------------------------
+# Deterministic intervention set on the system qubit
+# ---------------------------------------------------------------------------
+
+def det_I(qc: QuantumCircuit, q: int):
+    pass  # Identity — no-op
+
+
+def det_Z(qc: QuantumCircuit, q: int):
+    qc.rz(np.pi, q)
+
+
+def det_X(qc: QuantumCircuit, q: int):
+    qc.rx(np.pi, q)
+
+
+def det_Y(qc: QuantumCircuit, q: int):
+    qc.ry(np.pi, q)
+
 
 DEFAULT_DET_INTERVENTIONS = {
     0: det_I,
@@ -21,6 +44,11 @@ DEFAULT_DET_INTERVENTIONS = {
     2: det_X,
     3: det_Y,
 }
+
+
+# ---------------------------------------------------------------------------
+# Standard reservoir: CNOT-based ancilla measurement per timestep
+# ---------------------------------------------------------------------------
 
 def reservoir_results_per_window(
     X_windows,
@@ -34,8 +62,12 @@ def reservoir_results_per_window(
     washout_length: int = 5,
 ):
     """
-    Run separate circuits per window WITH washout prefix.
-    Each window gets [washout_labels + window_labels].
+    Run one circuit per input window with a washout prefix.
+
+    Qubit layout: q_sys=0, q_mem=1..num_memory, q_anc=num_memory+1.
+    Classical register: one bit per timestep (washout + window).
+
+    Returns a list of Qiskit Result objects, one per window.
     """
     if det_basis is None:
         det_basis = DEFAULT_DET_INTERVENTIONS
@@ -44,63 +76,61 @@ def reservoir_results_per_window(
 
     num_windows, window_size = X_windows.shape
     ham_block_fn = MODEL_BLOCKS[model_key]
-    
-    # Washout labels: all zeros (identity operations)
     washout_labels = np.zeros(washout_length, dtype=int)
-    
+
+    q_sys = 0
+    q_mem = list(range(1, 1 + num_memory))
+    q_anc = 1 + num_memory
+    n_qubits = 2 + num_memory  # sys + memory + ancilla
+    block_qubits = [q_sys] + q_mem
+
     all_results = []
 
     for i in range(num_windows):
-        qpu = get_default_qpu()
-        # Full sequence for this window: washout + actual window
         full_window = np.concatenate([washout_labels, X_windows[i]])
-        
-        pr = Program()
-        q_sys = pr.qalloc(1)
-        q_mem = pr.qalloc(num_memory)
-        q_anc = pr.qalloc(1)
-        cbit = pr.calloc(1)
+        n_total = len(full_window)
 
-        pr.apply(X, q_sys[0])
-        block_qubits = [q_sys[0]] + list(q_mem)
+        qc = QuantumCircuit(n_qubits, n_total)
+        qc.x(q_sys)  # initial state preparation
 
-        for label in full_window:
-            ham_block_fn(pr, block_qubits, dt=dt, n_steps=n_steps, **model_kwargs)
+        for t, label in enumerate(full_window):
+            ham_block_fn(qc, block_qubits, dt=dt, n_steps=n_steps, **model_kwargs)
 
             det_op = det_basis.get(int(label))
             if det_op is None:
                 raise ValueError(f"No deterministic op for label {label}")
-            det_op(pr, q_sys[0])
+            det_op(qc, q_sys)
 
-            pr.apply(CNOT, [q_sys[0], q_anc[0]])
-            pr.measure(q_anc[0], cbit)
-            pr.reset([q_anc[0]])
+            # Measure ancilla via CNOT probe, reset ancilla for reuse
+            qc.cx(q_sys, q_anc)
+            qc.measure(q_anc, t)
+            qc.reset(q_anc)
 
-        circuit = pr.to_circ()
-        #circuit.display()
-        job = circuit.to_job(nbshots=shots)
-        result = qpu.submit(job)
-        all_results.append(result)
+        qc_t = transpile(qc, _backend, optimization_level=0)
+        all_results.append(_backend.run(qc_t, shots=shots).result())
 
-    return all_results  # List[num_windows] of Results
+    return all_results
 
 
-# === helper: weak ancilla probe + measure ===
-def weak_ancilla_probe_and_measure(pr, q_sys, q_anc, cbit, epsilon=0.12):
+# ---------------------------------------------------------------------------
+# Weak measurement variant: ancilla-assisted weak probe
+# ---------------------------------------------------------------------------
+
+def _weak_probe(qc: QuantumCircuit, q_sys: int, q_anc: int, cbit: int, epsilon: float):
     """
-    Ancilla-assisted weak measurement of system Z.
-    Implemented as controlled-Ry(epsilon) via CNOT sandwich:
-      CNOT(sys->anc); RY(eps) on anc; CNOT(sys->anc)
-    Then measure anc into classical bit index `cbit` and reset ancilla.
-    epsilon in radians (small ~0.05-0.25).
+    Ancilla-assisted weak measurement of σ_z on q_sys.
+
+    Applies a genuine controlled-RY(epsilon) so the ancilla outcome depends on
+    the system state -- P(anc=1) = 0 for |0> and sin^2(eps/2) for |1> -- then
+    measures into classical bit `cbit` and resets the ancilla.
+
+    A CNOT-RY-CNOT sandwich does NOT work here: it yields RY(+eps) for |0> and
+    RY(-eps) for |1>, whose measurement statistics are identical, so the
+    ancilla record would carry no information about the system.
     """
-    # controlled-RY via CNOT sandwich
-    pr.apply(CNOT, [q_sys, q_anc])
-    pr.apply(RY(epsilon), q_anc)
-    pr.apply(CNOT, [q_sys, q_anc])
-    # measure ancilla into the specified classical bit and reset ancilla
-    pr.measure(q_anc, cbit)
-    pr.reset([q_anc])
+    qc.cry(epsilon, q_sys, q_anc)
+    qc.measure(q_anc, cbit)
+    qc.reset(q_anc)
 
 
 def reservoir_results_per_window_ancilla(
@@ -113,17 +143,16 @@ def reservoir_results_per_window_ancilla(
     det_basis: dict | None = None,
     model_kwargs: dict | None = None,
     washout_length: int = 5,
-    epsilon: float = 0.12,          # weak probe angle (radians)
-    final_strong_measure: bool = False,  # optionally measure system at end
+    epsilon: float = 0.12,
+    final_strong_measure: bool = False,
 ):
     """
     Quantum reservoir with ancilla-assisted weak measurement at each timestep.
 
-    Returns:
-        all_results: list of QPU Result objects (one per input window).
-                     Each result contains shot-level classical registers; the
-                     per-timestep ancilla outcomes are stored in the classical
-                     register bits (one bit per timestep).
+    Classical register: one bit per timestep storing the ancilla outcome.
+    Optionally appends a final strong measurement of the system qubit.
+
+    Returns a list of Qiskit Result objects, one per window.
     """
     if det_basis is None:
         det_basis = DEFAULT_DET_INTERVENTIONS
@@ -132,53 +161,38 @@ def reservoir_results_per_window_ancilla(
 
     num_windows, window_size = X_windows.shape
     ham_block_fn = MODEL_BLOCKS[model_key]
-
-    # Washout labels: all zeros (identity operations)
     washout_labels = np.zeros(washout_length, dtype=int)
+
+    q_sys = 0
+    q_mem = list(range(1, 1 + num_memory))
+    q_anc = 1 + num_memory
+    n_qubits = 2 + num_memory
+    block_qubits = [q_sys] + q_mem
 
     all_results = []
 
     for i in range(num_windows):
-        qpu = get_default_qpu()
-        # Full sequence for this window: washout + actual window
         full_window = np.concatenate([washout_labels, X_windows[i]])
-        n_total_steps = len(full_window)
+        n_total = len(full_window)
+        n_cbits = n_total + (1 if final_strong_measure else 0)
 
-        pr = Program()
-        q_sys = pr.qalloc(1)
-        q_mem = pr.qalloc(num_memory)
-        q_anc = pr.qalloc(1)
-
-        # Allocate a classical register with one bit per timestep to store ancilla outcomes
-        c_reg = pr.calloc(n_total_steps)
-
-        # Optional initial system preparation (as in your original code)
-        pr.apply(X, q_sys[0])
-
-        block_qubits = [q_sys[0]] + list(q_mem)
+        qc = QuantumCircuit(n_qubits, n_cbits)
+        qc.x(q_sys)
 
         for t_idx, label in enumerate(full_window):
-            # 1) Hamiltonian evolution block (Trotterized)
-            ham_block_fn(pr, block_qubits, dt=dt, n_steps=n_steps, **model_kwargs)
+            ham_block_fn(qc, block_qubits, dt=dt, n_steps=n_steps, **model_kwargs)
 
-            # 2) Deterministic intervention mapped from bin label (acts on system)
             det_op = det_basis.get(int(label))
             if det_op is None:
                 raise ValueError(f"No deterministic op for label {label}")
-            det_op(pr, q_sys[0])
+            det_op(qc, q_sys)
 
-            # 3) Ancilla-assisted weak probe + measure into classical register bit t_idx
-            weak_ancilla_probe_and_measure(pr, q_sys[0], q_anc[0], c_reg[t_idx], epsilon=epsilon)
+            _weak_probe(qc, q_sys, q_anc, t_idx, epsilon=epsilon)
 
-        # Optionally perform a final strong measurement of the system (or memory qubits)
         if final_strong_measure:
-            final_bit = pr.calloc(1)
-            pr.measure(q_sys[0], final_bit)
+            qc.measure(q_sys, n_total)
 
-        # Build and submit job
-        circuit = pr.to_circ()
-        job = circuit.to_job(nbshots=shots)
-        result = qpu.submit(job)
-        all_results.append(result)
+        qc_t = transpile(qc, _backend, optimization_level=0)
+        all_results.append(_backend.run(qc_t, shots=shots).result())
 
     return all_results

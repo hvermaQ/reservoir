@@ -1,0 +1,17 @@
+config,family,task_key,control,model,num_memory,shots,total_time,W,encoding,arm,mean,std,n,sem
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,linear_raw,0.05927275751578309,0.0027776379732041495,3,0.0016036700315407424
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,linear_symbolic,0.08250880190556903,0.007556626449063596,3,0.004362820314532313
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,mean,0.09267036592836157,0.01050334886744951,3,0.006064111296014526
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,persistence,0.07523624274188197,0.0010712329425307992,3,0.0006184766277349519
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,quantum,0.06992098379531718,0.007699987472138685,3,0.004445589839796016
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,random_unitary,0.066966129701242,0.007227992159277496,3,0.004173083218859367
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,raw_only,0.059352683909941306,0.0027994535011480457,3,0.0016162652324716645
+negative_controls,timeseries,narma10,none,XXZ,4,0,0.2,10.0,continuous,raw_plus_reservoir,0.059639900676341735,0.002848263611708288,3,0.0016444457629427958
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,linear_raw,0.029049718453581338,0.0008716601902070086,3,0.0005032532454578968
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,linear_symbolic,0.028360782325891468,0.0012125437760762778,3,0.0007000624755218443
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,mean,0.028672239277947265,0.0010398514922625968,3,0.0006003585389750443
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,persistence,0.04176071259523247,0.0016802576916734168,3,0.0009700972305955864
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,quantum,0.030391706964410518,0.0022184766043178016,3,0.0012808380646937697
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,random_unitary,0.031307460496212504,0.00315341139288159,3,0.0018206229165458189
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,raw_only,0.03486099474501163,0.004183951057709649,3,0.002415605269444885
+negative_controls,timeseries,stock:vol2of3,none,XXZ,4,0,0.2,10.0,continuous,raw_plus_reservoir,0.0308078252150308,0.0016062289790501282,3,0.0009273567334347694

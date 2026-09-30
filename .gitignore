@@ -1,9 +1,25 @@
 *.pyc
 __pycache__/
-*.ipynb
-reserve_loop.py
-reserve_end_to_end.py
+**/__pycache__/
+*.egg-info/
+dist/
+build/
 2013-01/
 *.png
 *.npy
 *.json
+.DS_Store
+**/.DS_Store
+
+# results/ holds experiment output; do not let the *.json/*.npy rules swallow it
+!results/**
+
+# configs/ are source, not output -- the blanket *.json rule above would eat them
+!configs/**
+
+# derived dataset cache: rebuildable with `qrc.py prepare`, never committed
+cache/
+
+# per-unit shards are numerous; keep the aggregated tables, not the raw shards
+results/runs/
+
