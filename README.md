@@ -8,7 +8,91 @@ The headline finding so far is negative and the repository is built to state it
 defensibly rather than to hide it: across every properly controlled comparison
 run to date, the quantum feature map does not beat a tuned, width-matched
 classical baseline, and usually does not beat a Haar-random unitary of the same
-dimension. See `docs/` and `results/aggregated/`.
+dimension. See [Results so far](#results-so-far) and `results/aggregated/`.
+
+---
+
+## Background
+
+The reservoir design follows O'Donovan, Dowling, Modi & Mitchison, *Diagnosing
+Chaos with Projected Ensembles of Process Tensors*, PRX Quantum **7**, 020322
+(2026), doi:10.1103/fgc4-hgk1. Model Hamiltonians and parameters (Table I) are
+copied into `qrc/ham_gen.py` as `HAM_PARAMS`. The paper's figures of merit
+(QDE, spatiotemporal entanglement, PPE moments) measure how quickly local
+traces of past interventions are scrambled; prediction needs them preserved.
+Read the paper's regime (L = 12–14, Néel initial state, large δt) as a
+diagnostic setting, not a recipe for a good reservoir.
+
+The repo has gone through three phases:
+
+1. **Financial QRC prototype (Nov 2025).** Option-price deviation from
+   Black–Scholes and swaption-matrix imputation. Series are symbolised to 4
+   letters and driven into a small spin chain, with mid-circuit measurement
+   and an MLP/Ridge readout.
+2. **Comb / process-tensor reservoirs (Dec 2025).** Comb-based and
+   weak-measurement reservoirs. **Results from this phase are invalid**: see
+   the gate bugs below.
+3. **Audit and benchmark harness (Sep 2026).**
+   - Found and fixed three silent gate bugs:
+     - `apply_yy` was ZZ.
+     - `heisenberg_pair` had no XX/YY term.
+     - The weak probe carried no system information.
+   - Rebuilt the reservoir as a pure-state process (`qrc/ppe.py`) with an
+     entanglement readout.
+   - Built the controlled, multi-seed sweep harness described below.
+
+---
+
+## Results so far
+
+Single-seed runs from the original runners (`results/ppe/`,
+`results/classifier/`) after the bugs were fixed. Each comparator is the best
+tuned, width-matched classical method for that domain.
+
+| domain | best quantum | best classical |
+|---|---|---|
+| financial regression (NRMSE, lower is better) | 0.2405 | 0.0879 (degree-2 features) |
+| MNIST, PCA-16, 20k samples (acc) | 0.9075 | 0.9473 (RBF-SVM) |
+| source classification (acc) | 0.8677 | 0.9430 (RFF, width-matched) |
+
+* 0/12 MNIST and 0/24 source-classification configurations beat the best
+  classical baseline.
+* A Haar-random unitary matches or beats the physics Hamiltonian in 10/12 and
+  21/24 of them. The choice of Hamiltonian contributes nothing measurable.
+* **Re-uploading** the input is the one change that helped a lot: source
+  classification went from 0.73 to 0.85 (L=5) and from 0.76 to 0.87 (L=7).
+* **512 shots is catastrophic**: source classification drops from 0.85 to
+  0.55 and the model ranking collapses into noise.
+
+### Why
+
+* With product encodings, every feature is a tensor-Fourier function of the
+  inputs. The **encoding** fixes the function class; the Hamiltonian only
+  picks coefficients within it (Schuld, Sweke & Meyer 2021). That is why a
+  random unitary does as well.
+* Nominal width overstates usable dimension. A 90-feature map had a
+  participation ratio of about 13.
+* Entanglement shrinks the readout signal. The spread of ⟨σ_z⟩ falls from
+  0.28 to 0.03 as L goes from 3 to 11.
+* A purely unitary reservoir has no fading memory (streaming memory capacity
+  ≈ 0), so it needs either per-window reset or measurement-induced dissipation.
+
+One hypothesis was tested and **falsified**: that PPE distribution width can
+select the best model. Its correlation with accuracy is about 0 at every shot
+budget.
+
+### Harness runs
+
+Only `negative_controls.json` has been run (54/54 units,
+`results/aggregated/negative_controls/`). Both controls behave as designed:
+
+* With `shuffle_labels`, every arm falls to chance.
+* With `shuffle_features`, the quantum and Haar arms collapse to chance while
+  the classical arms are unaffected.
+
+On the unshuffled tasks the quantum arm is `inferior` or `inconclusive`
+against every comparator. The one significant win (timeseries vs `raw_only`)
+is still `inconclusive` against the 0.02 margin. Every other config is still to run.
 
 ---
 
@@ -71,7 +155,7 @@ the same as one that can.
 
 Or end to end: `./scripts/run_local.sh configs/smoke.json 8`.
 
-Start with `configs/smoke.json` (4 units). It exercises every code path and
+Start with `configs/smoke.json` (14 units). It exercises every code path and
 costs seconds, so a broken config fails in seconds rather than at hour six.
 
 ### Many machines
@@ -194,17 +278,17 @@ invalidated by three silent Hamiltonian bugs.
 
 ## Configs
 
-| config | units | what it answers |
-|---|---|---|
-| `smoke.json` | 14 | harness validation, all three families + both controls |
-| `negative_controls.json` | 54 | **run this first** — leakage check; nothing else is trustworthy until it passes |
-| `classification_seeds.json` | 2700 | breadth grid + entropy dose-response via a `total_time` sweep within each model |
-| `entropy_matched.json` | 500 | models compared at equal task-conditional entanglement |
-| `streaming.json` | 960 | reservoir computing proper + memory capacity |
-| `timeseries_seeds.json` | 2200 | 3 synthetic + options + 7 stock cohorts |
-| `shots.json` | 600 | finite-shot degradation, the hardware-relevant ceiling |
-| `stocks_bootstrap.json` | 120 | ticker-resampling uncertainty on the equity universe |
-| `size_scan.json` | 80 | does more Hilbert space help (with error bars) |
+| config | units | status | what it answers |
+|---|---|---|---|
+| `smoke.json` | 14 | not run | harness validation, all three families + both controls |
+| `negative_controls.json` | 54 | **done**, passes | **run this first** — leakage check; nothing else is trustworthy until it passes |
+| `classification_seeds.json` | 2700 | not run | breadth grid + entropy dose-response via a `total_time` sweep within each model |
+| `entropy_matched.json` | 500 | not run | models compared at equal task-conditional entanglement |
+| `streaming.json` | 960 | not run | reservoir computing proper + memory capacity |
+| `timeseries_seeds.json` | 2200 | not run | 3 synthetic + options + 7 stock cohorts |
+| `shots.json` | 600 | not run | finite-shot degradation, the hardware-relevant ceiling |
+| `stocks_bootstrap.json` | 120 | not run | ticker-resampling uncertainty on the equity universe |
+| `size_scan.json` | 80 | not run | does more Hilbert space help (with error bars) |
 
 Grid and task keys are validated on load, so a mistyped key fails immediately
 instead of silently doing nothing to a 2000-unit sweep.
@@ -263,5 +347,13 @@ should go through `scripts/qrc.py`.
 `results/heisen_disorder/` and `results/ising_tfim_disorder/` are **invalid** —
 every entry has `R2: NaN` with `MAE == RMSE`, i.e. single-sample evaluation, and
 they predate the gate-bug fixes. Do not cite them.
+
+`docs/reservoir_explain.pptx` is the slide deck from phase 1. It predates
+the gate-bug fixes; do not reuse its numbers.
+
+`run_comb_reservoir.py`, `run_reservoir_comb_weak.py`, `reserve_end-to-end.py`,
+`reserve_multip.py` and `swaptions_run.py` are the measured-reservoir pipelines
+from phases 1–2. Their settings live in `qrc/config.py`, where `dt` is a Trotter
+step: total evolution time is `n_steps · dt`.
 
 `archive/` holds superseded myQLM-era scripts.
