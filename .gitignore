@@ -10,6 +10,7 @@ build/
 *.json
 .DS_Store
 **/.DS_Store
+data/
 
 # results/ holds experiment output; do not let the *.json/*.npy rules swallow it
 !results/**
